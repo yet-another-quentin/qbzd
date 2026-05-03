@@ -71,13 +71,6 @@ export function initTitleBarStore(): void {
     if (savedControls !== null) {
       showWindowControls = savedControls !== 'false';
     }
-
-    // Sync current mode to backend on every init so the SQLite store
-    // always reflects what the frontend believes (covers users who edited
-    // localStorage manually or migrated from a different machine).
-    invoke('v2_set_titlebar_mode', { mode }).catch((e) => {
-      console.error('[TitleBarStore] Failed to sync mode to backend:', e);
-    });
   } catch (e) {
     console.error('[TitleBarStore] Failed to initialize:', e);
   }
@@ -154,18 +147,19 @@ export async function setMode(value: TitlebarMode): Promise<void> {
   const newWantsDecorations =
     value === 'system' || value === 'plasma';
 
-  mode = value;
-  try {
-    localStorage.setItem(STORAGE_KEY_MODE, value);
-  } catch (e) {
-    console.error('[TitleBarStore] Failed to save mode setting:', e);
-  }
-
+  // Push to backend FIRST. If it fails, leave local state untouched.
   try {
     await invoke('v2_set_titlebar_mode', { mode: value });
   } catch (e) {
     console.error('[TitleBarStore] Failed to push mode to backend:', e);
     return;
+  }
+
+  mode = value;
+  try {
+    localStorage.setItem(STORAGE_KEY_MODE, value);
+  } catch (e) {
+    console.error('[TitleBarStore] Failed to save mode setting:', e);
   }
 
   if (previousWantsDecorations !== newWantsDecorations) {

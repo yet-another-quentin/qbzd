@@ -1006,7 +1006,12 @@
 
   // Title bar settings
   let titlebarMode = $state<TitlebarMode>(getMode());
-  let availableModes = $state<TitlebarMode[]>(['qbz', 'system', 'hidden']);
+  // Fallback list before v2_available_titlebar_modes resolves. Always include
+  // the currently active mode so the dropdown shows the user's selected value
+  // even when the backend invoke fails.
+  let availableModes = $state<TitlebarMode[]>(
+    titlebarMode === 'plasma' ? ['qbz', 'system', 'plasma', 'hidden'] : ['qbz', 'system', 'hidden']
+  );
   let isSandboxed = $state(false);
   let matchSystemWindowChromeState = $state(getMatchSystemWindowChrome());
   let windowControlsVisible = $state(getShowWindowControls());

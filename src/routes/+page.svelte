@@ -4848,6 +4848,10 @@
     initSearchBarLocation();
     const unsubscribeSearchBarLocation = subscribeSearchBarLocation(() => {
       searchBarLocationPref = getEffectiveSearchBarLocation();
+      // In plasma mode the strip's visibility depends on whether search
+      // or any nav item is enabled, so a search-location toggle can flip
+      // the strip on/off.
+      showTitleBar = shouldShowTitleBar();
     });
 
     // Initialize and subscribe to window controls customization
@@ -4868,6 +4872,10 @@
       tbNavLibrary = isLibraryInTitlebar();
       tbNavMyQbz = isMyQbzInTitlebar();
       tbNavPurchases = isPurchasesInTitlebar();
+      // In plasma mode the strip's visibility depends on whether any nav
+      // item or search is enabled, so toggling the last nav item can
+      // flip the strip on/off.
+      showTitleBar = shouldShowTitleBar();
     });
 
     // Detect floating window state (not maximized) for rounded corners + shadow

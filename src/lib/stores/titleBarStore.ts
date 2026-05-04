@@ -14,6 +14,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { skipIfRemote } from '$lib/services/commandRouter';
 import { platform } from '$lib/utils/platform';
+import { getSearchBarLocation } from './searchBarLocationStore';
+import { isTitlebarNavEnabled } from './titlebarNavStore';
 
 export type TitlebarMode = 'qbz' | 'system' | 'plasma' | 'hidden';
 
@@ -89,12 +91,20 @@ export function getMode(): TitlebarMode {
 /**
  * Whether the custom TitleBar.svelte component should mount.
  * - macOS always uses native overlay → false.
- * - 'qbz' and 'plasma' → true (full or stripped variant).
+ * - 'qbz' → true (full variant).
+ * - 'plasma' → true ONLY if the stripped strip would carry content
+ *   (search-in-titlebar OR at least one nav item). Otherwise the
+ *   42px strip would render empty below the KWin SSD.
  * - 'system' and 'hidden' → false.
  */
 export function shouldShowTitleBar(): boolean {
   if (platform === 'macos') return false;
-  return mode === 'qbz' || mode === 'plasma';
+  if (mode === 'system' || mode === 'hidden') return false;
+  if (mode === 'qbz') return true;
+  // mode === 'plasma' — only render the strip if it has effective content.
+  // (In plasma, the effective values for search location and titlebar nav
+  //  match the user prefs directly per the derived-state table.)
+  return getSearchBarLocation() === 'titlebar' || isTitlebarNavEnabled();
 }
 
 /**

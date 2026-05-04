@@ -2114,6 +2114,26 @@
       "windowTitleShow": "Afficher la piste dans le titre",
       "windowTitleTemplate": "Modèle du titre",
       "windowTitleTemplateHelp": "Variables : {artist}, {track}, {album}",
+      "titlebar": {
+        "label": "Barre de titre",
+        "mode": {
+          "label": "Mode de barre de titre",
+          "qbz": "Barre QBZ (par défaut)",
+          "system": "Barre système",
+          "plasma": "Barre Plasma (KDE Wayland)",
+          "hidden": "Aucune barre (WM en mosaïque)"
+        },
+        "showWindowControls": "Afficher les contrôles de fenêtre (min/max/fermer)",
+        "matchSystemChrome": "Aligner sur le chrome du système",
+        "searchLocation": "Emplacement de la recherche",
+        "disabledHint": {
+          "windowControls": "Ne s'applique qu'avec la barre QBZ active. Le mode Plasma le désactive car KDE le fournit.",
+          "matchSystemChrome": "Ne s'applique qu'avec la barre QBZ active. Le mode Plasma le désactive car KDE le fournit.",
+          "searchLocation": "L'emplacement de la recherche ne s'applique pas sans barre de titre. Il bascule vers la barre latérale.",
+          "titlebarNav": "La navigation dans la barre de titre ne s'applique qu'en modes QBZ ou Plasma."
+        },
+        "sandboxCaveat": "Le mode Plasma n'est pas vérifié sur les builds sandboxés (Flatpak/Snap). Si le chrome système n'apparaît pas, basculez vers le mode Système."
+      },
       "useSystemTitleBar": "Utiliser la barre de titre du système",
       "useSystemTitleBarDesc": "Remplacer la barre de titre personnalisée de QBZ par les décorations natives de votre système. Ce changement redémarrera l'application.",
       "hideTitleBar": "Masquer la barre de titre",

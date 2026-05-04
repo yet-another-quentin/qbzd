@@ -2114,6 +2114,26 @@
       "windowTitleShow": "Show track in window title",
       "windowTitleTemplate": "Title template",
       "windowTitleTemplateHelp": "Placeholders: {artist}, {track}, {album}",
+      "titlebar": {
+        "label": "Window titlebar",
+        "mode": {
+          "label": "Titlebar mode",
+          "qbz": "QBZ titlebar (default)",
+          "system": "System titlebar",
+          "plasma": "Plasma titlebar (KDE Wayland)",
+          "hidden": "No titlebar (tiling WM)"
+        },
+        "showWindowControls": "Show window controls (min/max/close)",
+        "matchSystemChrome": "Match system window chrome",
+        "searchLocation": "Search location",
+        "disabledHint": {
+          "windowControls": "Only applies when QBZ titlebar is active. Plasma mode disables this because KDE provides it.",
+          "matchSystemChrome": "Only applies when QBZ titlebar is active. Plasma mode disables this because KDE provides it.",
+          "searchLocation": "Search location does not apply when no titlebar is shown. Falls back to the sidebar.",
+          "titlebarNav": "Titlebar navigation only applies in QBZ or Plasma modes."
+        },
+        "sandboxCaveat": "Plasma mode is unverified in sandboxed builds (Flatpak/Snap). If the system chrome doesn't appear, switch to System mode."
+      },
       "useSystemTitleBar": "Use system title bar",
       "useSystemTitleBarDesc": "Replace QBZ custom title bar with your system's native window decorations. Changing this will restart the app.",
       "hideTitleBar": "Hide title bar",

@@ -2114,6 +2114,26 @@
       "windowTitleShow": "Mostrar faixa no título",
       "windowTitleTemplate": "Modelo do título",
       "windowTitleTemplateHelp": "Marcadores: {artist}, {track}, {album}",
+      "titlebar": {
+        "label": "Barra de título",
+        "mode": {
+          "label": "Modo da barra de título",
+          "qbz": "Barra QBZ (padrão)",
+          "system": "Barra do sistema",
+          "plasma": "Barra Plasma (KDE Wayland)",
+          "hidden": "Sem barra (WM em mosaico)"
+        },
+        "showWindowControls": "Mostrar controles de janela (min/máx/fechar)",
+        "matchSystemChrome": "Combinar com o cromado do sistema",
+        "searchLocation": "Localização da pesquisa",
+        "disabledHint": {
+          "windowControls": "Apenas se aplica quando a barra QBZ está ativa. O modo Plasma desativa isto porque o KDE o fornece.",
+          "matchSystemChrome": "Apenas se aplica quando a barra QBZ está ativa. O modo Plasma desativa isto porque o KDE o fornece.",
+          "searchLocation": "A localização da pesquisa não se aplica sem barra de título. Recorre à barra lateral.",
+          "titlebarNav": "A navegação da barra de título só se aplica nos modos QBZ ou Plasma."
+        },
+        "sandboxCaveat": "O modo Plasma não está verificado em builds sandboxed (Flatpak/Snap). Se o cromado do sistema não aparecer, mude para o modo Sistema."
+      },
       "useSystemTitleBar": "Usar barra de título do sistema",
       "useSystemTitleBarDesc": "Substituir a barra de título personalizada do QBZ pelas decorações de janela nativas do seu sistema. Alterar isso reiniciará o app.",
       "hideTitleBar": "Ocultar barra de título",

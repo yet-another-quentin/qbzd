@@ -454,8 +454,25 @@ fn create_output_stream_with_config(
 /// Output stream type - either rodio or ALSA Direct
 enum StreamType {
     Rodio(MixerDeviceSink),
+    #[cfg(target_os = "macos")]
+    CoreAudio {
+        sink: MixerDeviceSink,
+        _exclusive_guard: Option<qbz_audio::CoreAudioExclusiveGuard>,
+    },
     #[cfg(target_os = "linux")]
     AlsaDirect(Arc<qbz_audio::AlsaDirectStream>),
+}
+
+impl StreamType {
+    fn rodio_sink(&self) -> Option<&MixerDeviceSink> {
+        match self {
+            StreamType::Rodio(sink) => Some(sink),
+            #[cfg(target_os = "macos")]
+            StreamType::CoreAudio { sink, .. } => Some(sink),
+            #[cfg(target_os = "linux")]
+            StreamType::AlsaDirect(_) => None,
+        }
+    }
 }
 
 /// Try to create output stream using the backend system (if configured)
@@ -469,10 +486,10 @@ fn try_init_stream_with_backend(
     state: &SharedState,
 ) -> Option<Result<StreamType, String>> {
     // Check if backend system is configured.
-    // On non-Linux, default to SystemDefault when not explicitly set,
-    // so macOS gets CoreAudio device probing and sample rate switching.
+    // On macOS, default to SystemDefault when not explicitly set,
+    // so CoreAudio device probing and sample rate switching are active.
     let backend_type = audio_settings.backend_type.or_else(|| {
-        if cfg!(not(target_os = "linux")) {
+        if cfg!(target_os = "macos") {
             Some(qbz_audio::AudioBackendType::SystemDefault)
         } else {
             None
@@ -540,15 +557,26 @@ fn try_init_stream_with_backend(
     }
 
     // Fallback to regular rodio stream (PipeWire, Pulse, ALSA via CPAL)
-    match backend.create_output_stream(&config) {
-        Ok(mixer_sink) => {
+    match backend.create_output_stream_with_exclusive_guard(&config) {
+        Ok((mixer_sink, exclusive_guard)) => {
             log::info!(
                 "Stream created via {:?} backend at {}Hz",
                 backend_type,
                 sample_rate
             );
             state.set_bit_perfect_mode(Some(BitPerfectMode::Disabled));
-            Some(Ok(StreamType::Rodio(mixer_sink)))
+            #[cfg(target_os = "macos")]
+            let stream = if backend_type == AudioBackendType::SystemDefault {
+                StreamType::CoreAudio {
+                    sink: mixer_sink,
+                    _exclusive_guard: exclusive_guard,
+                }
+            } else {
+                StreamType::Rodio(mixer_sink)
+            };
+            #[cfg(not(target_os = "macos"))]
+            let stream = StreamType::Rodio(mixer_sink);
+            Some(Ok(stream))
         }
         Err(e) => {
             log::error!("Backend stream creation failed: {}", e);
@@ -970,7 +998,7 @@ impl Player {
              -> Option<StreamType> {
                 // Try backend system if configured
                 if let Ok(settings) = thread_settings.lock() {
-                    if settings.backend_type.is_some() {
+                    if settings.backend_type.is_some() || cfg!(target_os = "macos") {
                         // Use provided sample rate/channels to maintain DAC passthrough
                         log::info!(
                             "Initializing backend system with {}Hz/{}ch",
@@ -1147,7 +1175,7 @@ impl Player {
                             let dac_passthrough = thread_settings
                                 .lock()
                                 .ok()
-                                .map(|s| s.dac_passthrough)
+                                .map(|s| cfg!(target_os = "linux") && s.dac_passthrough)
                                 .unwrap_or(false);
 
                             // Check if we need to recreate the stream
@@ -1162,15 +1190,32 @@ impl Player {
                                 .and_then(|s| s.backend_type)
                                 .map(|b| b == AudioBackendType::Alsa)
                                 .unwrap_or(false);
+                            let using_coreaudio_exclusive = thread_settings
+                                .lock()
+                                .ok()
+                                .map(|s| {
+                                    cfg!(target_os = "macos")
+                                        && s.backend_type.unwrap_or(AudioBackendType::SystemDefault)
+                                            == AudioBackendType::SystemDefault
+                                        && s.exclusive_mode
+                                })
+                                .unwrap_or(false);
 
                             let needs_new_stream = stream_opt.is_none()
                                 || (dac_passthrough && format_changed)
-                                || (using_alsa_direct && format_changed);
+                                || (using_alsa_direct && format_changed)
+                                || (using_coreaudio_exclusive && format_changed);
 
                             if needs_new_stream {
                                 if stream_opt.is_some() {
-                                    if (dac_passthrough || using_alsa_direct) && format_changed {
-                                        let mode = if using_alsa_direct {
+                                    if (dac_passthrough
+                                        || using_alsa_direct
+                                        || using_coreaudio_exclusive)
+                                        && format_changed
+                                    {
+                                        let mode = if using_coreaudio_exclusive {
+                                            "CoreAudio exclusive"
+                                        } else if using_alsa_direct {
                                             "ALSA Direct"
                                         } else {
                                             "DAC passthrough"
@@ -1201,9 +1246,10 @@ impl Player {
                                 }
 
                                 log::info!(
-                                    "DAC passthrough: {}, ALSA Direct: {}",
+                                    "DAC passthrough: {}, ALSA Direct: {}, CoreAudio exclusive: {}",
                                     dac_passthrough,
-                                    using_alsa_direct
+                                    using_alsa_direct,
+                                    using_coreaudio_exclusive
                                 );
 
                                 // Try backend system first (if configured), then fall back to legacy CPAL
@@ -1421,7 +1467,8 @@ impl Player {
 
                             // Create PlaybackEngine from StreamType
                             let mut engine = match stream {
-                                StreamType::Rodio(ref mixer_sink) => {
+                                stream if stream.rodio_sink().is_some() => {
+                                    let mixer_sink = stream.rodio_sink().expect("rodio sink");
                                     match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                         Ok(e) => {
                                             *consecutive_sink_failures = 0;
@@ -1485,6 +1532,9 @@ impl Player {
                                         hardware_volume,
                                     )
                                 }
+                                _ => unreachable!(
+                                    "non-rodio stream handled by platform-specific arms"
+                                ),
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
@@ -1607,7 +1657,7 @@ impl Player {
                             let dac_passthrough = thread_settings
                                 .lock()
                                 .ok()
-                                .map(|s| s.dac_passthrough)
+                                .map(|s| cfg!(target_os = "linux") && s.dac_passthrough)
                                 .unwrap_or(false);
 
                             // Check if we need to recreate the stream
@@ -1620,15 +1670,32 @@ impl Player {
                                 .and_then(|s| s.backend_type)
                                 .map(|b| b == AudioBackendType::Alsa)
                                 .unwrap_or(false);
+                            let using_coreaudio_exclusive = thread_settings
+                                .lock()
+                                .ok()
+                                .map(|s| {
+                                    cfg!(target_os = "macos")
+                                        && s.backend_type.unwrap_or(AudioBackendType::SystemDefault)
+                                            == AudioBackendType::SystemDefault
+                                        && s.exclusive_mode
+                                })
+                                .unwrap_or(false);
 
                             let needs_new_stream = stream_opt.is_none()
                                 || (dac_passthrough && format_changed)
-                                || (using_alsa_direct && format_changed);
+                                || (using_alsa_direct && format_changed)
+                                || (using_coreaudio_exclusive && format_changed);
 
                             if needs_new_stream {
                                 if stream_opt.is_some() {
-                                    if (dac_passthrough || using_alsa_direct) && format_changed {
-                                        let mode = if using_alsa_direct {
+                                    if (dac_passthrough
+                                        || using_alsa_direct
+                                        || using_coreaudio_exclusive)
+                                        && format_changed
+                                    {
+                                        let mode = if using_coreaudio_exclusive {
+                                            "CoreAudio exclusive"
+                                        } else if using_alsa_direct {
                                             "ALSA Direct"
                                         } else {
                                             "DAC passthrough"
@@ -1774,7 +1841,8 @@ impl Player {
 
                             // Create PlaybackEngine
                             let mut engine = match stream {
-                                StreamType::Rodio(ref mixer_sink) => {
+                                stream if stream.rodio_sink().is_some() => {
+                                    let mixer_sink = stream.rodio_sink().expect("rodio sink");
                                     match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                         Ok(e) => {
                                             *consecutive_sink_failures = 0;
@@ -1802,6 +1870,9 @@ impl Player {
                                         hardware_volume,
                                     )
                                 }
+                                _ => unreachable!(
+                                    "non-rodio stream handled by platform-specific arms"
+                                ),
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
@@ -2000,7 +2071,8 @@ impl Player {
                                 };
 
                                 let mut engine = match stream {
-                                    StreamType::Rodio(ref mixer_sink) => {
+                                    stream if stream.rodio_sink().is_some() => {
+                                        let mixer_sink = stream.rodio_sink().expect("rodio sink");
                                         match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                             Ok(e) => e,
                                             Err(e) => {
@@ -2024,6 +2096,9 @@ impl Player {
                                             hardware_volume,
                                         )
                                     }
+                                    _ => unreachable!(
+                                        "non-rodio stream handled by platform-specific arms"
+                                    ),
                                 };
 
                                 let volume =
@@ -2152,12 +2227,8 @@ impl Player {
                             //     playback reach this handler with
                             //     current_audio_data Some and skip the
                             //     streaming branch entirely (issue #335).
-                            if current_audio_data.is_none()
-                                && current_streaming_source.is_none()
-                            {
-                                log::warn!(
-                                    "Audio thread: cannot seek - no audio data available"
-                                );
+                            if current_audio_data.is_none() && current_streaming_source.is_none() {
+                                log::warn!("Audio thread: cannot seek - no audio data available");
                                 return;
                             }
                             if let Some(ref stream_src) = *current_streaming_source {
@@ -2210,7 +2281,8 @@ impl Player {
                             }
 
                             let mut engine = match stream {
-                                StreamType::Rodio(ref mixer_sink) => {
+                                stream if stream.rodio_sink().is_some() => {
+                                    let mixer_sink = stream.rodio_sink().expect("rodio sink");
                                     match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                         Ok(e) => e,
                                         Err(e) => {
@@ -2234,6 +2306,9 @@ impl Player {
                                         hardware_volume,
                                     )
                                 }
+                                _ => unreachable!(
+                                    "non-rodio stream handled by platform-specific arms"
+                                ),
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
@@ -2251,56 +2326,42 @@ impl Player {
                             // probe the format (e.g., rodio-only MP4/AAC),
                             // preserving existing behavior for those cases.
                             let skip_duration = Duration::from_secs(position_secs);
-                            let skipped_source: Box<dyn Source<Item = f32> + Send> =
-                                if let Some(ref stream_src) = *current_streaming_source {
-                                    match IncrementalStreamingSource::new(stream_src.clone()) {
-                                        Ok(mut s) => {
-                                            if let Err(e) = s.seek_to(skip_duration) {
-                                                log::error!(
-                                                    "Failed to native-seek streaming source: {}",
-                                                    e
-                                                );
-                                                return;
-                                            }
-                                            Box::new(s)
-                                        }
-                                        Err(e) => {
+                            let skipped_source: Box<dyn Source<Item = f32> + Send> = if let Some(
+                                ref stream_src,
+                            ) =
+                                *current_streaming_source
+                            {
+                                match IncrementalStreamingSource::new(stream_src.clone()) {
+                                    Ok(mut s) => {
+                                        if let Err(e) = s.seek_to(skip_duration) {
                                             log::error!(
-                                                "Failed to create streaming source for seek: {}",
+                                                "Failed to native-seek streaming source: {}",
                                                 e
                                             );
                                             return;
                                         }
+                                        Box::new(s)
                                     }
-                                } else {
-                                    let audio_data = current_audio_data
-                                        .as_ref()
-                                        .expect("current_audio_data was checked Some above");
-                                    match InMemorySource::new(audio_data.clone()) {
-                                        Ok(mut s) => match s.seek_to(skip_duration) {
-                                            Ok(()) => Box::new(s),
-                                            Err(e) => {
-                                                log::warn!(
+                                    Err(e) => {
+                                        log::error!(
+                                            "Failed to create streaming source for seek: {}",
+                                            e
+                                        );
+                                        return;
+                                    }
+                                }
+                            } else {
+                                let audio_data = current_audio_data
+                                    .as_ref()
+                                    .expect("current_audio_data was checked Some above");
+                                match InMemorySource::new(audio_data.clone()) {
+                                    Ok(mut s) => match s.seek_to(skip_duration) {
+                                        Ok(()) => Box::new(s),
+                                        Err(e) => {
+                                            log::warn!(
                                                     "Native seek on cached source failed ({}); falling back to skip_duration",
                                                     e
                                                 );
-                                                match decode_with_fallback(audio_data) {
-                                                    Ok(fb) => Box::new(fb.skip_duration(skip_duration)),
-                                                    Err(e) => {
-                                                        log::error!(
-                                                            "Failed to decode audio for seek: {}",
-                                                            e
-                                                        );
-                                                        return;
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        Err(e) => {
-                                            log::warn!(
-                                                "InMemorySource probe failed ({}); falling back to skip_duration",
-                                                e
-                                            );
                                             match decode_with_fallback(audio_data) {
                                                 Ok(fb) => Box::new(fb.skip_duration(skip_duration)),
                                                 Err(e) => {
@@ -2312,8 +2373,25 @@ impl Player {
                                                 }
                                             }
                                         }
+                                    },
+                                    Err(e) => {
+                                        log::warn!(
+                                                "InMemorySource probe failed ({}); falling back to skip_duration",
+                                                e
+                                            );
+                                        match decode_with_fallback(audio_data) {
+                                            Ok(fb) => Box::new(fb.skip_duration(skip_duration)),
+                                            Err(e) => {
+                                                log::error!(
+                                                    "Failed to decode audio for seek: {}",
+                                                    e
+                                                );
+                                                return;
+                                            }
+                                        }
                                     }
-                                };
+                                }
+                            };
 
                             // Send Reset to analyzer (seek invalidates accumulated samples)
                             let _ = analyzer_tx.try_send(AnalyzerMessage::Reset);

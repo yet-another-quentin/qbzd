@@ -345,7 +345,7 @@
   .search-btn {
     padding: 6px 16px;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 6px;
     font-size: 13px;
@@ -525,7 +525,7 @@
 
   .preview-btn:hover {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .selected-indicator {
@@ -535,7 +535,7 @@
     align-items: center;
     justify-content: center;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border-radius: 50%;
   }
 
@@ -571,7 +571,7 @@
   .confirm-btn {
     background: var(--accent-primary);
     border: none;
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .confirm-btn:hover:not(:disabled) {

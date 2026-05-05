@@ -1371,7 +1371,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .retry-btn {
     margin-top: 16px; padding: 8px 24px;
-    background-color: var(--accent-primary); color: white;
+    background-color: var(--accent-primary); color: var(--btn-primary-text);
     border: none; border-radius: 8px; cursor: pointer;
   }
   .retry-btn:hover { opacity: 0.9; }

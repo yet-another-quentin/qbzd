@@ -397,7 +397,7 @@
 
   .seg.active {
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--btn-primary-text);
   }
 
   .seg + .seg {

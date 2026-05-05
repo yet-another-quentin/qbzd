@@ -1005,12 +1005,13 @@
   let windowTitleTemplate = $state(DEFAULT_WINDOW_TITLE_TEMPLATE);
 
   // Title bar settings
-  let titlebarMode = $state<TitlebarMode>(getMode());
+  const initialTitlebarMode: TitlebarMode = getMode();
+  let titlebarMode = $state<TitlebarMode>(initialTitlebarMode);
   // Fallback list before v2_available_titlebar_modes resolves. Always include
   // the currently active mode so the dropdown shows the user's selected value
   // even when the backend invoke fails.
   let availableModes = $state<TitlebarMode[]>(
-    titlebarMode === 'plasma' ? ['qbz', 'system', 'plasma', 'hidden'] : ['qbz', 'system', 'hidden']
+    initialTitlebarMode === 'plasma' ? ['qbz', 'system', 'plasma', 'hidden'] : ['qbz', 'system', 'hidden']
   );
   let isSandboxed = $state(false);
   let matchSystemWindowChromeState = $state(getMatchSystemWindowChrome());
@@ -6391,7 +6392,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     background: var(--accent-primary);
     border: none;
     border-radius: 6px;
-    color: white;
+    color: var(--btn-primary-text);
     cursor: pointer;
     transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
@@ -6636,7 +6637,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: var(--btn-primary-text);
     font-size: 14px;
     font-weight: 600;
     flex-shrink: 0;
@@ -7021,7 +7022,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     cursor: pointer;
     transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
   }
 
@@ -7280,7 +7281,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .auth-start-btn {
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
   }
 
@@ -7521,7 +7522,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .copy-btn {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 6px;
     padding: 6px 14px;

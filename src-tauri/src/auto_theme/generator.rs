@@ -31,55 +31,61 @@ pub fn generate_theme(palette: &ThemePalette, source: &str) -> GeneratedTheme {
         )
     };
 
-    // Adjust text-primary for contrast if needed
+    // Verify each text tier against bg_primary at its target contrast ratio.
+    // text_disabled is intentionally low-contrast (visual cue for disabled state).
     let text_primary = ensure_text_contrast(text_primary, &palette.bg_primary, palette.is_dark);
+    let text_secondary =
+        ensure_text_contrast_target(text_secondary, &palette.bg_primary, palette.is_dark, 4.5);
+    let text_muted =
+        ensure_text_contrast_target(text_muted, &palette.bg_primary, palette.is_dark, 3.0);
 
     vars.insert("--text-primary".into(), text_primary.to_hex());
     vars.insert("--text-secondary".into(), text_secondary.to_hex());
     vars.insert("--text-muted".into(), text_muted.to_hex());
     vars.insert("--text-disabled".into(), text_disabled.to_hex());
 
-    // Accent
-    vars.insert("--accent-primary".into(), palette.accent.to_hex());
-    vars.insert(
-        "--accent-hover".into(),
-        palette.accent.shift_lightness(0.10).to_hex(),
-    );
-    vars.insert(
-        "--accent-active".into(),
-        palette.accent.shift_lightness(-0.10).to_hex(),
-    );
+    // Accent triplet — pick btn-primary-text once that works across all three states.
+    let accent = palette.accent;
+    let accent_hover = accent.shift_lightness(0.10);
+    let accent_active = accent.shift_lightness(-0.10);
+    vars.insert("--accent-primary".into(), accent.to_hex());
+    vars.insert("--accent-hover".into(), accent_hover.to_hex());
+    vars.insert("--accent-active".into(), accent_active.to_hex());
 
-    // Button text: white if accent is dark, black if light
-    let btn_text = if palette.accent.luminance() < 0.5 {
-        PaletteColor::new(255, 255, 255)
-    } else {
-        PaletteColor::new(0, 0, 0)
-    };
+    let btn_text = pick_btn_text_for_accent_set(&accent, &accent_hover, &accent_active);
     vars.insert("--btn-primary-text".into(), btn_text.to_hex());
 
-    // Status colors (fixed safe values, consistent with existing themes)
-    if palette.is_dark {
-        vars.insert("--danger".into(), "#ef4444".into());
-        vars.insert("--danger-bg".into(), "rgba(239, 68, 68, 0.1)".into());
-        vars.insert("--danger-border".into(), "rgba(239, 68, 68, 0.3)".into());
-        vars.insert("--danger-hover".into(), "rgba(239, 68, 68, 0.2)".into());
-
-        vars.insert("--warning".into(), "#fbbf24".into());
-        vars.insert("--warning-bg".into(), "rgba(251, 191, 36, 0.1)".into());
-        vars.insert("--warning-border".into(), "rgba(251, 191, 36, 0.3)".into());
-        vars.insert("--warning-hover".into(), "rgba(251, 191, 36, 0.2)".into());
+    // Status colors with paired FG tokens (--btn-danger-text, --btn-warning-text).
+    let (danger, warning) = if palette.is_dark {
+        (
+            PaletteColor::new(239, 68, 68),
+            PaletteColor::new(251, 191, 36),
+        )
     } else {
-        vars.insert("--danger".into(), "#dc2626".into());
-        vars.insert("--danger-bg".into(), "rgba(220, 38, 38, 0.1)".into());
-        vars.insert("--danger-border".into(), "rgba(220, 38, 38, 0.3)".into());
-        vars.insert("--danger-hover".into(), "rgba(220, 38, 38, 0.15)".into());
+        (
+            PaletteColor::new(220, 38, 38),
+            PaletteColor::new(217, 119, 6),
+        )
+    };
+    let hover_alpha = if palette.is_dark { 0.2 } else { 0.15 };
 
-        vars.insert("--warning".into(), "#d97706".into());
-        vars.insert("--warning-bg".into(), "rgba(217, 119, 6, 0.1)".into());
-        vars.insert("--warning-border".into(), "rgba(217, 119, 6, 0.3)".into());
-        vars.insert("--warning-hover".into(), "rgba(217, 119, 6, 0.15)".into());
-    }
+    vars.insert("--danger".into(), danger.to_hex());
+    vars.insert("--danger-bg".into(), danger.to_rgba(0.1));
+    vars.insert("--danger-border".into(), danger.to_rgba(0.3));
+    vars.insert("--danger-hover".into(), danger.to_rgba(hover_alpha));
+    vars.insert(
+        "--btn-danger-text".into(),
+        pick_btn_text_for_bg(&danger).to_hex(),
+    );
+
+    vars.insert("--warning".into(), warning.to_hex());
+    vars.insert("--warning-bg".into(), warning.to_rgba(0.1));
+    vars.insert("--warning-border".into(), warning.to_rgba(0.3));
+    vars.insert("--warning-hover".into(), warning.to_rgba(hover_alpha));
+    vars.insert(
+        "--btn-warning-text".into(),
+        pick_btn_text_for_bg(&warning).to_hex(),
+    );
 
     // Borders: subtle shifts from bg_primary
     let border_subtle = if palette.is_dark {
@@ -194,42 +200,41 @@ pub fn generate_theme_from_scheme(scheme: &SystemColorScheme) -> GeneratedTheme 
     let text_primary = ensure_text_contrast(text_primary, &window_bg, is_dark);
     vars.insert("--text-primary".into(), text_primary.to_hex());
 
-    // Secondary: slightly dimmed from primary
-    let text_secondary = scheme
+    // Secondary/muted/disabled — verify contrast (4.5 / 3.0; disabled stays low).
+    let text_secondary_raw = scheme
         .view_fg
         .unwrap_or_else(|| text_primary.shift_lightness(if is_dark { -0.10 } else { 0.10 }));
+    let text_secondary =
+        ensure_text_contrast_target(text_secondary_raw, &window_bg, is_dark, 4.5);
     vars.insert("--text-secondary".into(), text_secondary.to_hex());
 
-    let text_muted = scheme
+    let text_muted_raw = scheme
         .window_fg_inactive
         .unwrap_or_else(|| text_primary.shift_lightness(if is_dark { -0.25 } else { 0.25 }));
+    let text_muted = ensure_text_contrast_target(text_muted_raw, &window_bg, is_dark, 3.0);
     vars.insert("--text-muted".into(), text_muted.to_hex());
 
     let text_disabled = text_muted.shift_lightness(if is_dark { -0.10 } else { 0.10 });
     vars.insert("--text-disabled".into(), text_disabled.to_hex());
 
-    // ── Accent (selection) ───────────────────────────────────────────────
+    // ── Accent triplet (selection) ───────────────────────────────────────
     let accent = scheme
         .accent
         .or(scheme.selection_bg)
         .unwrap_or(PaletteColor::new(0, 120, 215));
-    vars.insert("--accent-primary".into(), accent.to_hex());
-
     let accent_hover = scheme
         .selection_hover
         .unwrap_or_else(|| accent.shift_lightness(0.10));
+    let accent_active = accent.shift_lightness(-0.10);
+    vars.insert("--accent-primary".into(), accent.to_hex());
     vars.insert("--accent-hover".into(), accent_hover.to_hex());
-    vars.insert(
-        "--accent-active".into(),
-        accent.shift_lightness(-0.10).to_hex(),
-    );
+    vars.insert("--accent-active".into(), accent_active.to_hex());
 
-    // Button text on accent
-    let btn_text = scheme.selection_fg.unwrap_or(if accent.luminance() < 0.5 {
-        PaletteColor::new(255, 255, 255)
-    } else {
-        PaletteColor::new(0, 0, 0)
-    });
+    // Trust DE-provided selection_fg if present — otherwise compute against the
+    // full triplet so hover/active states stay legible too.
+    let btn_text = scheme
+        .selection_fg
+        .unwrap_or_else(|| pick_btn_text_for_accent_set(&accent, &accent_hover, &accent_active));
     vars.insert("--btn-primary-text".into(), btn_text.to_hex());
 
     // ── Status colors ────────────────────────────────────────────────────
@@ -246,6 +251,10 @@ pub fn generate_theme_from_scheme(scheme: &SystemColorScheme) -> GeneratedTheme 
         "--danger-hover".into(),
         danger.to_rgba(if is_dark { 0.2 } else { 0.15 }),
     );
+    vars.insert(
+        "--btn-danger-text".into(),
+        pick_btn_text_for_bg(&danger).to_hex(),
+    );
 
     let warning = scheme.fg_neutral.unwrap_or(if is_dark {
         PaletteColor::new(251, 191, 36)
@@ -258,6 +267,10 @@ pub fn generate_theme_from_scheme(scheme: &SystemColorScheme) -> GeneratedTheme 
     vars.insert(
         "--warning-hover".into(),
         warning.to_rgba(if is_dark { 0.2 } else { 0.15 }),
+    );
+    vars.insert(
+        "--btn-warning-text".into(),
+        pick_btn_text_for_bg(&warning).to_hex(),
     );
 
     // ── Borders ──────────────────────────────────────────────────────────
@@ -315,13 +328,55 @@ pub fn generate_theme_from_scheme(scheme: &SystemColorScheme) -> GeneratedTheme 
     }
 }
 
+/// Pick the best foreground color for text on the given background (typically `accent`).
+///
+/// Strategy mirrors what we do in the static themes:
+///   1. If pure white reaches WCAG AA Large (3:1) on the bg, prefer it. This matches the
+///      visual convention "light text on accent button" used across the app, and accepts
+///      AA-Large for button labels (which are typically ≥14px bold or ≥18px regular).
+///   2. Otherwise, pick whichever of white/black has the higher contrast ratio.
+///
+/// This avoids the trap of the simple `luminance < 0.5` threshold, which produces
+/// catastrophic 2.0:1 ratios for mid-luminance accents like `#cba6f7` (lavender).
+fn pick_btn_text_for_bg(bg: &PaletteColor) -> PaletteColor {
+    let white = PaletteColor::new(255, 255, 255);
+    let black = PaletteColor::new(0, 0, 0);
+    let white_ratio = white.contrast_ratio(bg);
+    let black_ratio = black.contrast_ratio(bg);
+
+    if white_ratio >= 3.0 {
+        white
+    } else if black_ratio > white_ratio {
+        black
+    } else {
+        white
+    }
+}
+
 /// Ensure text has at least WCAG AA contrast (4.5:1) against the background.
 fn ensure_text_contrast(text: PaletteColor, bg: &PaletteColor, is_dark: bool) -> PaletteColor {
-    if text.contrast_ratio(bg) >= 4.5 {
+    ensure_text_contrast_target(text, bg, is_dark, 4.5)
+}
+
+/// Ensure text has at least the given contrast ratio against the background.
+///
+/// Iteratively shifts lightness toward white (dark themes) or black (light themes)
+/// until the target is met, then falls back to pure white/black after 20 steps.
+///
+/// Common targets:
+///   - `4.5` — WCAG AA Normal text (use for body/secondary copy)
+///   - `3.0` — WCAG AA Large text or UI components (use for muted helper text on
+///             buttons ≥14px bold or ≥18px regular)
+fn ensure_text_contrast_target(
+    text: PaletteColor,
+    bg: &PaletteColor,
+    is_dark: bool,
+    target: f64,
+) -> PaletteColor {
+    if text.contrast_ratio(bg) >= target {
         return text;
     }
 
-    // Shift text toward white (dark theme) or black (light theme) until contrast is met
     let (h, s, l) = text.to_hsl();
     let direction = if is_dark { 0.05 } else { -0.05 };
     let mut new_l = l;
@@ -329,16 +384,49 @@ fn ensure_text_contrast(text: PaletteColor, bg: &PaletteColor, is_dark: bool) ->
     for _ in 0..20 {
         new_l = (new_l + direction).clamp(0.0, 1.0);
         let candidate = PaletteColor::from_hsl(h, s, new_l);
-        if candidate.contrast_ratio(bg) >= 4.5 {
+        if candidate.contrast_ratio(bg) >= target {
             return candidate;
         }
     }
 
-    // Absolute fallback
     if is_dark {
         PaletteColor::new(255, 255, 255)
     } else {
         PaletteColor::new(0, 0, 0)
+    }
+}
+
+/// Pick the best foreground text color for the accent triplet (base, hover, active).
+///
+/// Like `pick_btn_text_for_bg` but considers the worst case across all three
+/// accent variants — so the chosen FG works on `:hover` and `:active` states too.
+/// Hover shifts lightness +0.10 (worst case for white text on dark accents);
+/// active shifts -0.10 (worst case for black text on light accents).
+fn pick_btn_text_for_accent_set(
+    accent: &PaletteColor,
+    accent_hover: &PaletteColor,
+    accent_active: &PaletteColor,
+) -> PaletteColor {
+    let white = PaletteColor::new(255, 255, 255);
+    let black = PaletteColor::new(0, 0, 0);
+
+    // Worst case for white text is the lightest variant (lowest delta to white).
+    let white_worst = white
+        .contrast_ratio(accent)
+        .min(white.contrast_ratio(accent_hover))
+        .min(white.contrast_ratio(accent_active));
+    // Worst case for black text is the darkest variant.
+    let black_worst = black
+        .contrast_ratio(accent)
+        .min(black.contrast_ratio(accent_hover))
+        .min(black.contrast_ratio(accent_active));
+
+    if white_worst >= 3.0 {
+        white
+    } else if black_worst > white_worst {
+        black
+    } else {
+        white
     }
 }
 
@@ -455,6 +543,8 @@ mod tests {
             "--alpha-85",
             "--alpha-90",
             "--alpha-95",
+            "--btn-danger-text",
+            "--btn-warning-text",
         ];
 
         for key in &required {
@@ -464,5 +554,116 @@ mod tests {
                 key
             );
         }
+    }
+
+    #[test]
+    fn pick_btn_text_prefers_white_when_aa_large_passes() {
+        // Stratego red: white = 4.14:1 (AA-Large), black = 5.07:1 (AA Normal).
+        // The static-theme decision was to keep white for visual consistency.
+        let red = PaletteColor::new(0xed, 0x2f, 0x3d);
+        assert_eq!(pick_btn_text_for_bg(&red), PaletteColor::new(255, 255, 255));
+    }
+
+    #[test]
+    fn pick_btn_text_picks_black_when_white_fails_aa_large() {
+        // Catppuccin Mocha lavender: white = 2.03:1 (FAIL), black = 8.07:1 (AAA).
+        // The old luminance-threshold logic incorrectly picked white here because
+        // lum=0.55 ≥ 0.5 — but contrast was catastrophic.
+        let lavender = PaletteColor::new(0xcb, 0xa6, 0xf7);
+        assert_eq!(pick_btn_text_for_bg(&lavender), PaletteColor::new(0, 0, 0));
+    }
+
+    #[test]
+    fn pick_btn_text_picks_black_for_dracula_purple() {
+        // bd93f9: white = 2.41 (FAIL), black = 8.71 (AAA). Old code picked white
+        // (lum 0.43 < 0.5) — wrong.
+        let purple = PaletteColor::new(0xbd, 0x93, 0xf9);
+        assert_eq!(pick_btn_text_for_bg(&purple), PaletteColor::new(0, 0, 0));
+    }
+
+    #[test]
+    fn pick_btn_text_handles_high_contrast_yellow() {
+        // ffff00: white = 1.07 (utterly fails), black = 19.56 (AAA). Must pick black.
+        let yellow = PaletteColor::new(255, 255, 0);
+        assert_eq!(pick_btn_text_for_bg(&yellow), PaletteColor::new(0, 0, 0));
+    }
+
+    #[test]
+    fn pick_btn_text_white_on_dark_navy() {
+        // Deep blue: white = ~14:1, black = ~1.5:1. Trivially white.
+        let navy = PaletteColor::new(0x12, 0x1a, 0x40);
+        assert_eq!(pick_btn_text_for_bg(&navy), PaletteColor::new(255, 255, 255));
+    }
+
+    #[test]
+    fn ensure_text_contrast_target_aa_normal_meets_45() {
+        // Mid-grey text on dark bg: starts at ~3:1, must shift to ≥4.5.
+        let bg = PaletteColor::new(20, 20, 20);
+        let dim_text = PaletteColor::new(110, 110, 110);
+        let result = ensure_text_contrast_target(dim_text, &bg, true, 4.5);
+        assert!(
+            result.contrast_ratio(&bg) >= 4.5,
+            "got {:.2}",
+            result.contrast_ratio(&bg)
+        );
+    }
+
+    #[test]
+    fn ensure_text_contrast_target_aa_large_meets_3() {
+        // Same dim text but only need AA-Large — should converge faster (or be unchanged
+        // if already ≥3).
+        let bg = PaletteColor::new(20, 20, 20);
+        let dim_text = PaletteColor::new(110, 110, 110);
+        let result = ensure_text_contrast_target(dim_text, &bg, true, 3.0);
+        assert!(
+            result.contrast_ratio(&bg) >= 3.0,
+            "got {:.2}",
+            result.contrast_ratio(&bg)
+        );
+    }
+
+    #[test]
+    fn pick_btn_text_for_accent_set_holds_across_hover_active() {
+        // Catppuccin Mocha lavender + ±10% lightness variants.
+        // Black should be picked because white fails everywhere.
+        let accent = PaletteColor::new(0xcb, 0xa6, 0xf7);
+        let hover = accent.shift_lightness(0.10);
+        let active = accent.shift_lightness(-0.10);
+        assert_eq!(
+            pick_btn_text_for_accent_set(&accent, &hover, &active),
+            PaletteColor::new(0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn pick_btn_text_for_accent_set_picks_white_for_deep_navy() {
+        // Deep navy stays dark across the triplet — white is the safe choice.
+        let accent = PaletteColor::new(0x12, 0x1a, 0x40);
+        let hover = accent.shift_lightness(0.10);
+        let active = accent.shift_lightness(-0.10);
+        assert_eq!(
+            pick_btn_text_for_accent_set(&accent, &hover, &active),
+            PaletteColor::new(255, 255, 255)
+        );
+    }
+
+    #[test]
+    fn generated_theme_includes_btn_status_text_tokens() {
+        let palette = ThemePalette {
+            bg_primary: PaletteColor::new(20, 20, 20),
+            bg_secondary: PaletteColor::new(30, 30, 30),
+            bg_tertiary: PaletteColor::new(45, 45, 45),
+            bg_hover: PaletteColor::new(35, 35, 35),
+            accent: PaletteColor::new(100, 200, 100),
+            is_dark: true,
+            all_colors: vec![],
+        };
+        let theme = generate_theme(&palette, "test");
+        assert!(theme.variables.contains_key("--btn-danger-text"));
+        assert!(theme.variables.contains_key("--btn-warning-text"));
+        // For #ef4444 (dark theme red): white passes AA-Large → expect white.
+        assert_eq!(theme.variables.get("--btn-danger-text").unwrap(), "#ffffff");
+        // For #fbbf24 (dark theme gold): white fails (1.92), black wins.
+        assert_eq!(theme.variables.get("--btn-warning-text").unwrap(), "#000000");
     }
 }

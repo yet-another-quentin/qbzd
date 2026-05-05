@@ -189,7 +189,7 @@
 
   .control-btn.primary {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .control-btn:disabled {

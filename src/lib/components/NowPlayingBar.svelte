@@ -935,7 +935,7 @@
     gap: 8px;
     padding: 4px 12px;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     font-size: 12px;
     font-weight: 500;
     letter-spacing: 0.02em;

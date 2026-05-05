@@ -774,7 +774,7 @@
   .mini-btn:active {
     transform: scale(0.95);
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .mini-btn.danger {

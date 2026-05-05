@@ -334,7 +334,7 @@
 
   .link-btn:hover {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .link-btn :global(svg:last-child) {

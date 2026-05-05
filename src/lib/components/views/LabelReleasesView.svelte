@@ -880,7 +880,7 @@
     margin-top: 16px;
     padding: 8px 24px;
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 8px;
     cursor: pointer;

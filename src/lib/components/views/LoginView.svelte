@@ -627,7 +627,7 @@
   .retry-btn {
     padding: 10px 24px;
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -699,7 +699,7 @@
     justify-content: center;
     gap: 8px;
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 8px;
     font-size: 16px;

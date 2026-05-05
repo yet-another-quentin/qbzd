@@ -585,7 +585,7 @@
 
   .protocol-tab.active {
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .protocol-tab .count {
@@ -708,7 +708,7 @@
   .connect-btn {
     padding: 8px 16px;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 6px;
     font-size: 13px;

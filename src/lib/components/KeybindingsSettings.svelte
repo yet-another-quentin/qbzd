@@ -229,7 +229,7 @@
     font-size: 11px;
     padding: 2px 8px;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border-radius: 10px;
     font-weight: 500;
   }

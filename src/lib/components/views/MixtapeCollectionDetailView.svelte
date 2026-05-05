@@ -2482,7 +2482,7 @@
     font-size: 10px;
     font-weight: 600;
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
     border-radius: 10px;
     margin-left: 2px;
   }
@@ -2508,7 +2508,7 @@
   }
   .view-mode-group .control-btn.seg.active {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
     border-color: var(--accent-primary);
   }
 
@@ -3089,7 +3089,7 @@
 
   .m-btn-primary {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
     border: none;
   }
   .m-btn-primary:disabled {

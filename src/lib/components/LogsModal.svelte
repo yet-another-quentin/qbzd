@@ -226,7 +226,7 @@
 
   .tab.active {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border-color: var(--accent-primary);
   }
 

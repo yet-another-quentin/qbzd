@@ -197,7 +197,7 @@
     background: var(--accent-primary);
     border: none;
     border-radius: 6px;
-    color: white;
+    color: var(--btn-primary-text);
     font-size: 20px;
     cursor: pointer;
     transition: opacity 150ms ease;
@@ -233,7 +233,7 @@
     gap: 4px;
     padding: 4px 8px;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border-radius: 4px;
     font-size: 13px;
     font-family: var(--font-sans);

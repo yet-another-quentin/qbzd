@@ -351,7 +351,7 @@
     gap: 8px;
     padding: 10px 20px;
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 8px;
     font-size: 14px;
@@ -510,7 +510,7 @@
   }
   .view-mode-group .control-btn.seg.active {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
     border-color: var(--accent-primary);
   }
 

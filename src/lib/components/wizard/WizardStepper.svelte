@@ -107,12 +107,12 @@
 
   .step-button.complete .step-indicator {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .step-button.active .step-indicator {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     box-shadow: 0 0 0 4px rgba(66, 133, 244, 0.2);
   }
 

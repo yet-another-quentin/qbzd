@@ -217,7 +217,7 @@
   .go-btn {
     padding: 10px 20px;
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 8px;
     font-size: 14px;
@@ -256,7 +256,7 @@
     align-self: flex-start;
     padding: 8px 16px;
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 6px;
     font-size: 13px;

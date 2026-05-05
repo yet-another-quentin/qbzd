@@ -1094,7 +1094,7 @@
     background: var(--accent-primary);
     border: none;
     border-radius: 6px;
-    color: white;
+    color: var(--btn-primary-text);
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -1366,7 +1366,7 @@
 
   .btn-primary {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .btn-primary:hover:not(:disabled) {

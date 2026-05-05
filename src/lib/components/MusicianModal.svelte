@@ -309,7 +309,7 @@
     background: var(--accent-primary);
     border: none;
     border-radius: 10px;
-    color: white;
+    color: var(--btn-primary-text);
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;

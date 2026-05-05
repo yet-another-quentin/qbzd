@@ -297,7 +297,7 @@
 
   .action-btn.primary {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .action-btn.primary:hover {

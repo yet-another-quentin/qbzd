@@ -1054,7 +1054,7 @@
   }
   .segment.active {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
   }
 
   /* ── State messages ── */
@@ -1416,7 +1416,7 @@
   .primary-btn {
     padding: 10px 20px;
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 8px;
     font-size: 13px;

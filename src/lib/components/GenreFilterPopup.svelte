@@ -630,7 +630,7 @@
   }
 
   .genre-card.selected .genre-name {
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .check-circle {
@@ -732,12 +732,12 @@
   }
 
   .node-row.selected .expand-btn {
-    color: rgba(255, 255, 255, 0.7);
+    color: color-mix(in srgb, var(--btn-primary-text) 70%, transparent);
   }
 
   .node-row.selected .expand-btn:hover {
     background: rgba(255, 255, 255, 0.1);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .expand-placeholder {
@@ -786,11 +786,11 @@
   .check-box.partial {
     border-color: var(--accent-primary);
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .node-row.selected .check-box {
-    border-color: white;
+    border-color: var(--btn-primary-text);
   }
 
   .node-row.selected .check-box.checked {
@@ -807,7 +807,7 @@
   }
 
   .node-row.selected .node-name {
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .descendant-count {
@@ -820,8 +820,8 @@
   }
 
   .node-row.selected .descendant-count {
-    background: rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.8);
+    background: color-mix(in srgb, var(--btn-primary-text) 20%, transparent);
+    color: color-mix(in srgb, var(--btn-primary-text) 80%, transparent);
   }
 
   .children-container {

@@ -635,7 +635,7 @@
   .platform-tab.active {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .platform-instructions {
@@ -730,7 +730,7 @@
 
   .btn-primary {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
   }
 

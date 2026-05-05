@@ -171,7 +171,7 @@
   }
   .btn-primary {
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--btn-primary-text);
     border-color: var(--accent-primary);
     margin-left: 8px;
   }

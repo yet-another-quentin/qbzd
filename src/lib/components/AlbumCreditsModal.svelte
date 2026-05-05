@@ -685,7 +685,7 @@
     background: var(--accent-primary);
     border: none;
     border-radius: 50%;
-    color: white;
+    color: var(--btn-primary-text);
     cursor: pointer;
     transition: transform 150ms ease, background 150ms ease;
   }

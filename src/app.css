@@ -479,7 +479,7 @@
   --accent-primary: #d7827e;
   --accent-hover: #e5a478;
   --accent-active: #286983;
-  --btn-primary-text: #faf4ed;
+  --btn-primary-text: #575279;
   --danger: #b4637a;
   --danger-bg: rgba(180, 99, 122, 0.1);
   --danger-border: rgba(180, 99, 122, 0.3);
@@ -901,7 +901,7 @@
   --accent-primary: #5e81ac;
   --accent-hover: #81a1c1;
   --accent-active: #88c0d0;
-  --btn-primary-text: #eceff4;
+  --btn-primary-text: #2e3440;
   --danger: #bf616a;
   --danger-bg: rgba(191, 97, 106, 0.1);
   --danger-border: rgba(191, 97, 106, 0.3);
@@ -1237,7 +1237,7 @@
   --accent-primary: #ed2f3d;
   --accent-hover: #f74a58;
   --accent-active: #c41e2a;
-  --btn-primary-text: #0a0a0a;
+  --btn-primary-text: #ffffff;
 
   /* Status — bright alert red (distinct from accent) + antique gold (dragon crest horns) */
   --danger: #e63946;
@@ -1294,7 +1294,7 @@
   --accent-primary: #d5be58;
   --accent-hover: #e8ce66;
   --accent-active: #b49f45;
-  --btn-primary-text: #fbf9f2;
+  --btn-primary-text: #262424;
 
   /* Status colours */
   --danger: #c0392b;

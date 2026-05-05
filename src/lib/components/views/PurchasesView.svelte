@@ -1270,7 +1270,7 @@
   .control-btn.active {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .control-btn.active:hover {
@@ -1371,7 +1371,7 @@
     height: 18px;
     padding: 0 5px;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     font-size: 11px;
     font-weight: 600;
     border-radius: 9px;
@@ -1828,7 +1828,7 @@
 
   .download-btn:hover {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--btn-primary-text);
     border-color: var(--accent-primary);
   }
 

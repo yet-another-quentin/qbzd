@@ -590,7 +590,7 @@
     margin-top: 12px;
     padding: 6px 16px;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 6px;
     cursor: pointer;
@@ -739,7 +739,7 @@
 
   .action-btn.add:hover {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .action-btn.dismiss {
@@ -796,7 +796,7 @@
 
   .action-btn.add.added {
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .btn-spinner {

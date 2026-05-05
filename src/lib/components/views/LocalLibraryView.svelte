@@ -5426,7 +5426,7 @@
   .control-btn.active {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .control-btn.active:hover {
@@ -5516,7 +5516,7 @@
     height: 18px;
     padding: 0 5px;
     background: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     font-size: 11px;
     font-weight: 600;
     border-radius: 9px;
@@ -5748,7 +5748,7 @@
     margin-top: 16px;
     padding: 8px 24px;
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -6730,11 +6730,11 @@
   }
 
   .artist-card-compact.selected .artist-name {
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .artist-card-compact.selected .artist-meta {
-    color: rgba(255, 255, 255, 0.7);
+    color: color-mix(in srgb, var(--btn-primary-text) 70%, transparent);
   }
 
   .artist-card-image {

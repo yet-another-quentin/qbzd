@@ -1078,7 +1078,7 @@
     padding: 10px 16px;
     background: var(--accent-primary, #6366f1);
     background: linear-gradient(135deg, var(--accent-primary, #6366f1) 0%, color-mix(in srgb, var(--accent-primary, #6366f1) 80%, #000) 100%);
-    color: white;
+    color: var(--btn-primary-text);
     font-size: 12px;
   }
 
@@ -1205,7 +1205,7 @@
     color: var(--text-primary);
   }
 
-  .stop-after-marker {
-    color: var(--accent);
+  :global(.stop-after-marker) {
+    color: var(--accent-primary);
   }
 </style>

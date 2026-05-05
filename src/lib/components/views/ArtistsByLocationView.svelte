@@ -1278,7 +1278,7 @@
   }
 
   .genre-card.selected .genre-name {
-    color: white;
+    color: var(--btn-primary-text);
   }
 
   .check-circle {

@@ -3568,7 +3568,7 @@
   }
 
   .track-row-wrapper.multi-selected :global(.track-row) {
-    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+    background-color: color-mix(in srgb, var(--accent-primary) 22%, transparent);
   }
 
   /* Custom order mode */

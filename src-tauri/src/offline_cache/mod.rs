@@ -165,8 +165,8 @@ impl OfflineCacheState {
         let db_path = cache_dir.join("index.db");
         let db = OfflineCacheDb::new(&db_path)?;
 
-        // Default limit: 2GB
-        let default_limit = Some(2 * 1024 * 1024 * 1024u64);
+        // Default limit: 5GB
+        let default_limit = Some(5 * 1024 * 1024 * 1024u64);
 
         let state = Self {
             db: Arc::new(Mutex::new(Some(db))),
@@ -191,7 +191,7 @@ impl OfflineCacheState {
             db: Arc::new(Mutex::new(None)),
             fetcher: Arc::new(StreamFetcher::new()),
             cache_dir: Arc::new(RwLock::new(cache_dir)),
-            limit_bytes: Arc::new(Mutex::new(Some(2 * 1024 * 1024 * 1024u64))),
+            limit_bytes: Arc::new(Mutex::new(Some(5 * 1024 * 1024 * 1024u64))),
             cache_semaphore: Arc::new(Semaphore::new(3)),
             library_db: Arc::new(Mutex::new(None)),
         }

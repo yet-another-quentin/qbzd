@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildRollup, type CachedTrackInfo } from './offlineCacheManagerStore';
+import { buildRollup, type CachedTrackInfo } from './offlineCacheManagerStore.svelte';
 
 function track(
   id: number,

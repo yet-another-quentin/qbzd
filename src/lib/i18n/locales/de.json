@@ -1194,7 +1194,15 @@
       "redownloadingAlbum": "{count} Titel werden erneut heruntergeladen…",
       "redownloadingTrack": "Titel wird erneut heruntergeladen…",
       "removedAlbum": "{album} entfernt ({size} freigegeben)",
-      "removedTrack": "Titel entfernt"
+      "removedTrack": "Titel entfernt",
+      "limitTooLow": "Das Limit muss mindestens 5 GB betragen",
+      "limitSaved": "Cache-Limit gespeichert"
+    },
+    "limitModal": {
+      "title": "Cache-Größenlimit",
+      "helper": "Mindestens 5 GB. Hochwertige Titel benötigen Speicherplatz.",
+      "inputLabel": "Limit (GB)",
+      "editAria": "Cache-Größenlimit bearbeiten"
     },
     "empty": {
       "title": "Noch keine Offline-Inhalte",

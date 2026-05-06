@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { t } from 'svelte-i18n';
-  import { ArrowLeft } from 'lucide-svelte';
+  import { ArrowLeft, Pencil } from 'lucide-svelte';
   import { ask } from '@tauri-apps/plugin-dialog';
+  import { invoke } from '@tauri-apps/api/core';
   import Dropdown from '$lib/components/Dropdown.svelte';
+  import Modal from '$lib/components/Modal.svelte';
   import { offlineCacheManagerStore } from '$lib/stores/offlineCacheManagerStore.svelte';
   import { showToast } from '$lib/stores/toastStore';
 
@@ -151,6 +153,44 @@
     }
   }
 
+  // ── Limit modal (Fix #5b) ────────────────────────────────────────────────
+  let isLimitModalOpen = $state(false);
+  let limitGbInput = $state(5);
+  let savingLimit = $state(false);
+
+  function openLimitModal() {
+    const limitBytes = store.stats?.limitBytes ?? 5 * 1024 * 1024 * 1024;
+    // Round to nearest GB so the number input shows a clean integer.
+    limitGbInput = Math.max(5, Math.round(limitBytes / (1024 * 1024 * 1024)));
+    isLimitModalOpen = true;
+  }
+
+  function closeLimitModal() {
+    if (savingLimit) return;
+    isLimitModalOpen = false;
+  }
+
+  async function saveLimit() {
+    const gb = Number(limitGbInput);
+    if (!Number.isFinite(gb) || gb < 5) {
+      showToast($t('offlineManager.toast.limitTooLow'), 'error');
+      return;
+    }
+    savingLimit = true;
+    try {
+      // Backend takes limit in megabytes; 1 GB = 1024 MB.
+      await invoke('v2_set_offline_cache_limit', { limitMb: Math.round(gb * 1024) });
+      isLimitModalOpen = false;
+      await store.loadAll();
+      showToast($t('offlineManager.toast.limitSaved'), 'success');
+    } catch (err) {
+      console.error('[OfflineCacheManager] Failed to save limit:', err);
+      showToast(String(err), 'error');
+    } finally {
+      savingLimit = false;
+    }
+  }
+
   async function onTrackAction(track: { trackId: number; title: string }, action: 'redownload' | 'remove') {
     switch (action) {
       case 'redownload':
@@ -220,6 +260,15 @@
               values: { used: formatBytes(store.stats.totalSizeBytes) },
             })}
           {/if}
+          <button
+            type="button"
+            class="ocm-limit-edit"
+            onclick={openLimitModal}
+            aria-label={$t('offlineManager.limitModal.editAria')}
+            title={$t('offlineManager.limitModal.title')}
+          >
+            <Pencil size={14} />
+          </button>
         </span>
       {/if}
 
@@ -435,6 +484,37 @@
   {/if}
 </div>
 
+<Modal
+  isOpen={isLimitModalOpen}
+  onClose={closeLimitModal}
+  title={$t('offlineManager.limitModal.title')}
+  maxWidth="420px"
+>
+  <div class="limit-modal-body">
+    <label class="limit-input-row">
+      <span class="limit-input-label">{$t('offlineManager.limitModal.inputLabel')}</span>
+      <input
+        type="number"
+        min="5"
+        step="1"
+        bind:value={limitGbInput}
+        disabled={savingLimit}
+      />
+    </label>
+    <p class="limit-helper">{$t('offlineManager.limitModal.helper')}</p>
+  </div>
+  {#snippet footer()}
+    <div class="limit-modal-actions">
+      <button type="button" class="limit-btn-secondary" onclick={closeLimitModal} disabled={savingLimit}>
+        {$t('actions.cancel')}
+      </button>
+      <button type="button" class="limit-btn-primary" onclick={saveLimit} disabled={savingLimit}>
+        {savingLimit ? $t('actions.saving') : $t('actions.save')}
+      </button>
+    </div>
+  {/snippet}
+</Modal>
+
 <style>
   .offline-cache-manager {
     display: flex;
@@ -459,6 +539,84 @@
   .ocm-stat-totals, .ocm-stat-usage { white-space: nowrap; }
   .ocm-usage-bar { display: inline-block; vertical-align: middle; width: 120px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin-left: 8px; overflow: hidden; }
   .ocm-usage-fill { display: block; height: 100%; background: var(--accent-primary); transition: width 0.2s ease; }
+  .ocm-limit-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: 6px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    vertical-align: middle;
+    transition: color 150ms ease, background-color 150ms ease;
+  }
+  .ocm-limit-edit:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .limit-modal-body { display: flex; flex-direction: column; gap: 12px; }
+  .limit-input-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .limit-input-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .limit-input-row input {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-secondary, var(--bg-primary));
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 1rem;
+  }
+  .limit-input-row input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+  }
+  .limit-helper {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .limit-modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .limit-btn-secondary,
+  .limit-btn-primary {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: 1px solid var(--bg-tertiary);
+  }
+  .limit-btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .limit-btn-secondary:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+  .limit-btn-primary {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+  }
+  .limit-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+  .limit-btn-secondary:disabled,
+  .limit-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
   .ocm-controls { margin-left: auto; display: flex; gap: 12px; align-items: center; }
   .ocm-sort-label { color: var(--text-muted); font-size: 0.85rem; }
   .ocm-toggle { display: flex; gap: 6px; align-items: center; cursor: pointer; }

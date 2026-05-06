@@ -1194,7 +1194,15 @@
       "redownloadingAlbum": "Retéléchargement de {count} pistes…",
       "redownloadingTrack": "Retéléchargement de la piste…",
       "removedAlbum": "Album {album} retiré ({size} libéré)",
-      "removedTrack": "Piste retirée"
+      "removedTrack": "Piste retirée",
+      "limitTooLow": "La limite doit être d'au moins 5 Go",
+      "limitSaved": "Limite du cache enregistrée"
+    },
+    "limitModal": {
+      "title": "Taille maximale du cache",
+      "helper": "Minimum 5 Go. Les pistes haute qualité prennent de la place.",
+      "inputLabel": "Limite (Go)",
+      "editAria": "Modifier la taille du cache"
     },
     "empty": {
       "title": "Aucun contenu hors-ligne",

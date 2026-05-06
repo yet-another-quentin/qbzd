@@ -1194,7 +1194,15 @@
       "redownloadingAlbum": "Re-downloading {count} tracks…",
       "redownloadingTrack": "Re-downloading track…",
       "removedAlbum": "Removed {album} ({size} freed)",
-      "removedTrack": "Removed track"
+      "removedTrack": "Removed track",
+      "limitTooLow": "Limit must be at least 5 GB",
+      "limitSaved": "Cache limit saved"
+    },
+    "limitModal": {
+      "title": "Cache size limit",
+      "helper": "Minimum 5 GB. High-quality tracks need space.",
+      "inputLabel": "Limit (GB)",
+      "editAria": "Edit cache size limit"
     },
     "empty": {
       "title": "No offline content yet",

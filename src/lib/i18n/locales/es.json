@@ -1194,7 +1194,15 @@
       "redownloadingAlbum": "Descargando {count} pistas de nuevo…",
       "redownloadingTrack": "Descargando pista de nuevo…",
       "removedAlbum": "Álbum {album} quitado ({size} liberado)",
-      "removedTrack": "Pista quitada"
+      "removedTrack": "Pista quitada",
+      "limitTooLow": "El límite debe ser de al menos 5 GB",
+      "limitSaved": "Límite del caché guardado"
+    },
+    "limitModal": {
+      "title": "Límite del caché",
+      "helper": "Mínimo 5 GB. Las pistas en alta calidad requieren espacio.",
+      "inputLabel": "Límite (GB)",
+      "editAria": "Editar límite del caché"
     },
     "empty": {
       "title": "No hay contenido offline",

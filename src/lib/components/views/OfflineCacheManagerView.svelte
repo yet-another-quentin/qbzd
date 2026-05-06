@@ -293,7 +293,11 @@
                 onclick={() => album.albumId && store.toggleExpand(album.albumId)}
               >
                 <span class="chevron">{isExpanded ? '⌄' : '▸'}</span>
-                <div class="album-cover-placeholder"></div>
+                {#if album.coverUrl}
+                  <img class="album-cover" src={album.coverUrl} alt="" loading="lazy" />
+                {:else}
+                  <div class="album-cover-placeholder"></div>
+                {/if}
                 <div class="album-meta">
                   <div class="album-title">{album.title}</div>
                   <div class="album-subtitle">{album.artistLabel}</div>
@@ -543,4 +547,12 @@
     border-radius: 3px;
   }
   .track-menu button:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  .album-cover {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--bg-tertiary);
+  }
 </style>

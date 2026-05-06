@@ -183,6 +183,7 @@ class OfflineCacheManagerStore {
   private unlistenProgress: UnlistenFn | null = null;
   private unlistenProcessed: UnlistenFn | null = null;
   private unlistenFailed: UnlistenFn | null = null;
+  private albumArtworkCache = new Map<string, string | null>();
 
   setSinglesLabel(label: string) {
     this.singlesLabel = label;
@@ -219,12 +220,76 @@ class OfflineCacheManagerStore {
       if (!this.selectedArtistKey && this.artists.length > 0) {
         this.selectedArtistKey = this.artists[0].artistKey;
       }
+
+      // Fire-and-forget artwork hydration. Don't block loading state on it.
+      this.hydrateAlbumArtworks().catch(err => {
+        console.warn('[offlineCacheManager] hydrateAlbumArtworks failed:', err);
+      });
     } catch (err) {
       console.error('[offlineCacheManager] loadAll failed:', err);
       throw err;
     } finally {
       this.loading = false;
     }
+  }
+
+  private async hydrateAlbumArtworks(): Promise<void> {
+    // Collect unique albumIds across all artists that don't have a cached entry yet.
+    const pending: string[] = [];
+    const seen = new Set<string>();
+    for (const artist of this.artists) {
+      for (const album of artist.albumGroups) {
+        if (!album.albumId) continue;
+        if (seen.has(album.albumId)) continue;
+        seen.add(album.albumId);
+        if (!this.albumArtworkCache.has(album.albumId)) {
+          pending.push(album.albumId);
+        }
+      }
+    }
+    if (pending.length === 0) {
+      // Still patch in case cache has entries from a previous load that weren't applied yet.
+      this.applyArtworkCacheToArtists();
+      return;
+    }
+
+    const BATCH_SIZE = 8;
+    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+      const batch = pending.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(async albumId => {
+          try {
+            const album = await invoke<{
+              image?: { large?: string; small?: string; thumbnail?: string };
+            }>('v2_get_album', { albumId });
+            const url =
+              album?.image?.large ?? album?.image?.small ?? album?.image?.thumbnail ?? null;
+            this.albumArtworkCache.set(albumId, url);
+          } catch (err) {
+            console.warn(
+              `[offlineCacheManager] v2_get_album failed for ${albumId}:`,
+              err,
+            );
+            this.albumArtworkCache.set(albumId, null);
+          }
+        }),
+      );
+    }
+
+    this.applyArtworkCacheToArtists();
+  }
+
+  private applyArtworkCacheToArtists(): void {
+    this.artists = this.artists.map(artist => ({
+      ...artist,
+      albumGroups: artist.albumGroups.map(album => {
+        if (!album.albumId) return album;
+        const cached = this.albumArtworkCache.get(album.albumId);
+        if (cached === undefined) return album;
+        if (album.coverUrl === cached) return album;
+        return { ...album, coverUrl: cached };
+      }),
+    }));
   }
 
   async subscribeToProgress(): Promise<void> {
@@ -277,6 +342,7 @@ class OfflineCacheManagerStore {
       ...this.rawTracks.slice(idx + 1),
     ];
     this.artists = buildRollup(this.rawTracks, this.fullyCachedFlags, this.singlesLabel);
+    this.applyArtworkCacheToArtists();
   }
 
   async removeAlbum(albumId: string): Promise<{ removedTrackIds: number[]; freedBytes: number }> {
@@ -305,6 +371,7 @@ class OfflineCacheManagerStore {
     await invoke('v2_remove_cached_track', { trackId });
     this.rawTracks = this.rawTracks.filter(track => track.trackId !== trackId);
     this.artists = buildRollup(this.rawTracks, this.fullyCachedFlags, this.singlesLabel);
+    this.applyArtworkCacheToArtists();
   }
 
   selectArtist(key: string) {

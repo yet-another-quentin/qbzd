@@ -290,7 +290,9 @@ pub async fn v2_pause_playback(
     log::info!("[V2] Command: pause_playback");
     app_state.media_controls.set_playback(false);
     let bridge = bridge.get().await;
-    bridge.pause().map_err(RuntimeError::Internal)
+    bridge.pause().map_err(RuntimeError::Internal)?;
+    crate::commands_v2::helpers::PLAYBACK_STATE_WAKEUP.notify_one();
+    Ok(())
 }
 
 /// Resume playback (V2)
@@ -307,7 +309,9 @@ pub async fn v2_resume_playback(
     log::info!("[V2] Command: resume_playback");
     app_state.media_controls.set_playback(true);
     let bridge = bridge.get().await;
-    bridge.resume().map_err(RuntimeError::Internal)
+    bridge.resume().map_err(RuntimeError::Internal)?;
+    crate::commands_v2::helpers::PLAYBACK_STATE_WAKEUP.notify_one();
+    Ok(())
 }
 
 /// Stop playback (V2)
@@ -324,7 +328,9 @@ pub async fn v2_stop_playback(
     log::info!("[V2] Command: stop_playback");
     app_state.media_controls.set_stopped();
     let bridge = bridge.get().await;
-    bridge.stop().map_err(RuntimeError::Internal)
+    bridge.stop().map_err(RuntimeError::Internal)?;
+    crate::commands_v2::helpers::PLAYBACK_STATE_WAKEUP.notify_one();
+    Ok(())
 }
 
 /// Seek to position in seconds (V2)
@@ -351,6 +357,7 @@ pub async fn v2_seek(
         .media_controls
         .set_playback_with_progress(playback_state.is_playing, playback_state.position);
 
+    crate::commands_v2::helpers::PLAYBACK_STATE_WAKEUP.notify_one();
     Ok(())
 }
 
@@ -1574,6 +1581,7 @@ pub async fn v2_play_track(
         .play_data(audio_data, track_id)
         .map_err(RuntimeError::Internal)?;
     log::info!("[V2] Playing track {} ({} bytes)", track_id, data_size);
+    crate::commands_v2::helpers::PLAYBACK_STATE_WAKEUP.notify_one();
 
     // Prefetch next tracks in background (using CoreBridge queue)
     let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;

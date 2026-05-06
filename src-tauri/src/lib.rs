@@ -1258,6 +1258,13 @@ pub fn run(qconnect_cli_override: Option<bool>) {
                     // - fast (250ms) when playing - improves seekbar/lyrics sync
                     // - slow (1000ms) when paused/stopped with a track loaded
                     // - very slow (5000ms) when no track is loaded (idle)
+                    //
+                    // The idle/paused branches would gate the first emit after a
+                    // play/pause/seek command by their full sleep duration. We
+                    // race the sleep against `PLAYBACK_STATE_WAKEUP`, which the
+                    // V2 playback commands signal after they mutate state, so
+                    // the loop reads the new state within milliseconds instead
+                    // of waiting up to 5 seconds for the next idle tick.
                     let sleep_duration = if is_playing {
                         std::time::Duration::from_millis(250)
                     } else if track_id == 0 {
@@ -1265,7 +1272,10 @@ pub fn run(qconnect_cli_override: Option<bool>) {
                     } else {
                         std::time::Duration::from_millis(1000)
                     };
-                    tokio::time::sleep(sleep_duration).await;
+                    tokio::select! {
+                        _ = tokio::time::sleep(sleep_duration) => {},
+                        _ = commands_v2::helpers::PLAYBACK_STATE_WAKEUP.notified() => {},
+                    }
                 }
             });
 

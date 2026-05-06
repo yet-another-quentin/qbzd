@@ -20,7 +20,7 @@ pub struct V2PlaylistSuggestionsInput {
     pub config: Option<crate::artist_vectors::SuggestionConfig>,
 }
 
-mod helpers;
+pub(crate) mod helpers;
 pub use helpers::*;
 
 mod runtime;

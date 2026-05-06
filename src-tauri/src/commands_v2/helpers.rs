@@ -26,6 +26,17 @@ lazy_static::lazy_static! {
     /// Notify waiters when streaming download finishes.
     /// Prefetch waits on this if a streaming download is active.
     pub(crate) static ref CDN_STREAM_DONE: tokio::sync::Notify = tokio::sync::Notify::new();
+
+    /// Wakes the playback-state polling loop in `lib.rs` immediately after a
+    /// state-mutating V2 command (play, pause, resume, stop, seek). Without
+    /// this signal, the loop's idle/paused sleep (5s/1s) gates the first
+    /// `playback:state` emit on cold start, leaving the seekbar blank for
+    /// several seconds while audio is already playing.
+    ///
+    /// `notify_one` is used at the call site: it stores up to one permit if
+    /// no waiter is currently parked, so notifications are not lost between
+    /// loop iterations.
+    pub(crate) static ref PLAYBACK_STATE_WAKEUP: tokio::sync::Notify = tokio::sync::Notify::new();
 }
 
 /// Number of active streaming downloads (for the currently-playing track).

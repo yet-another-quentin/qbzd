@@ -1557,7 +1557,15 @@ impl LibraryDatabase {
         Ok(())
     }
 
-    /// Update artwork path for all tracks in an album group
+    /// Update artwork path for all tracks in an album group.
+    ///
+    /// **Deprecated**: this was used inside the scan loop to backfill
+    /// artwork across tracks in the same group, but it pisses every
+    /// track's individual artwork in the process — destroying unique
+    /// per-track embedded covers. Per-track artwork is now resolved
+    /// individually at scan time. Kept compilable for any caller that
+    /// might still exist; do not introduce new callers.
+    #[deprecated(note = "Was destructive in scan loop; per-track artwork is resolved during scan instead")]
     pub fn update_album_group_artwork(
         &self,
         group_key: &str,

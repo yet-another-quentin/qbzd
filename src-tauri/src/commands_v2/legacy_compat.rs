@@ -2,7 +2,7 @@
 //!
 //! Extracted from `commands_v2/mod.rs` — no functional changes.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -1314,6 +1314,13 @@ pub async fn v2_library_scan(
             })
             .collect();
 
+        // Cache `find_folder_artwork` results per folder for this scan run.
+        // Avoids re-walking the same album folder for every track without
+        // embedded art. Replaces the destructive `update_album_group_artwork`
+        // shortcut that previously propagated one track's artwork to all
+        // tracks in the group, destroying per-track embedded covers.
+        let mut folder_artwork_cache: HashMap<PathBuf, Option<String>> = HashMap::new();
+
         for audio_path in &scan_result.audio_files {
             // Check for cancellation
             if state.scan_cancel.load(Ordering::Relaxed) {
@@ -1351,9 +1358,17 @@ pub async fn v2_library_scan(
                         } else {
                             Some(track.album.as_str())
                         };
-                        if let Some(folder_art) =
-                            MetadataExtractor::find_folder_artwork(&canonical_path, album_hint)
-                        {
+                        let folder = canonical_path
+                            .parent()
+                            .map(|p| p.to_path_buf())
+                            .unwrap_or_else(|| canonical_path.clone());
+                        let cached = folder_artwork_cache
+                            .entry(folder)
+                            .or_insert_with(|| {
+                                MetadataExtractor::find_folder_artwork(&canonical_path, album_hint)
+                            })
+                            .clone();
+                        if let Some(folder_art) = cached {
                             artwork_path = MetadataExtractor::cache_artwork_file(
                                 std::path::Path::new(&folder_art),
                                 &artwork_cache,
@@ -1371,11 +1386,6 @@ pub async fn v2_library_scan(
                             file_path: path_str,
                             error: e.to_string(),
                         });
-                    } else if let (Some(artwork_path), false) = (
-                        track.artwork_path.as_ref(),
-                        track.album_group_key.is_empty(),
-                    ) {
-                        let _ = db.update_album_group_artwork(&track.album_group_key, artwork_path);
                     }
                 }
                 Err(e) => {

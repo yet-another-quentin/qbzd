@@ -211,6 +211,11 @@ class OfflineCacheManagerStore {
       this.stats = stats;
 
       this.artists = buildRollup(tracks, this.fullyCachedFlags, this.singlesLabel);
+      for (const artist of this.artists) {
+        for (const album of artist.albumGroups) {
+          if (album.albumId) this.expandedAlbums.add(album.albumId);
+        }
+      }
       if (!this.selectedArtistKey && this.artists.length > 0) {
         this.selectedArtistKey = this.artists[0].artistKey;
       }

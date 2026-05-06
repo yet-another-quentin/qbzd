@@ -1147,6 +1147,72 @@
     "showNetworkFoldersDesc": "Mostrar contenido de carpetas montadas en red (NAS, Samba, etc.) mientras estas en modo offline manual",
     "checkNow": "Verificar ahora"
   },
+  "offlineManager": {
+    "title": "Caché offline",
+    "stats": {
+      "totals": "{tracks} pistas · {albums} álbumes · {artists} artistas",
+      "usage": "{used} de {limit}",
+      "unlimited": "{used} de ilimitado"
+    },
+    "sort": {
+      "label": "Ordenar",
+      "alpha": "A–Z",
+      "recent": "Más reciente",
+      "largest": "Mayor tamaño primero",
+      "smallest": "Menor tamaño primero"
+    },
+    "filter": {
+      "showOnlyFailed": "Mostrar solo fallidas"
+    },
+    "row": {
+      "completeNTracks": "Completo · {count} pistas",
+      "partialNCached": "Parcial · {count} en caché",
+      "mixedQuality": "Mixta",
+      "nFailed": "{count} fallidas",
+      "actions": {
+        "redownloadAlbum": "Volver a descargar todas las pistas",
+        "removeAlbum": "Quitar de offline",
+        "retryFailed": "Reintentar fallidas",
+        "goToAlbum": "Ir al álbum"
+      }
+    },
+    "track": {
+      "actions": {
+        "redownloadTrack": "Volver a descargar pista",
+        "removeTrack": "Quitar de offline"
+      }
+    },
+    "confirmRemoveAlbum": {
+      "title": "¿Quitar del caché offline?",
+      "body": "Quitar \"{album}\" del caché offline. Liberará {size}."
+    },
+    "confirmRemoveTrack": {
+      "title": "¿Quitar pista del caché offline?",
+      "body": "Quitar \"{title}\" del caché offline."
+    },
+    "toast": {
+      "redownloadingAlbum": "Descargando {count} pistas de nuevo…",
+      "redownloadingTrack": "Descargando pista de nuevo…",
+      "removedAlbum": "Álbum {album} quitado ({size} liberado)",
+      "removedTrack": "Pista quitada",
+      "limitTooLow": "El límite debe ser de al menos 5 GB",
+      "limitSaved": "Límite del caché guardado"
+    },
+    "limitModal": {
+      "title": "Límite del caché",
+      "helper": "Mínimo 5 GB. Las pistas en alta calidad requieren espacio.",
+      "inputLabel": "Límite (GB)",
+      "editAria": "Editar límite del caché"
+    },
+    "empty": {
+      "title": "No hay contenido offline",
+      "body": "Marca pistas como disponibles offline desde cualquier álbum o playlist.",
+      "cta": "Ir a Favoritos"
+    },
+    "singlesPseudoAlbum": "Singles y pistas sueltas",
+    "discographyHeading": "Discografía",
+    "albumsCount": "{count} álbumes"
+  },
   "performerRoles": {
     "a&R": "Artistas y repertorio",
     "acousticGuitar": "guitarra acustica",
@@ -2591,12 +2657,12 @@
       "showInLibrary": "Mostrar en Biblioteca Local",
       "showInLibraryDesc": "Mostrar pistas del caché offline en la vista de Biblioteca Local",
       "clearCache": "Limpiar Todo",
-      "openFolder": "Abrir Carpeta",
+      "openFolder": "Administrar caché offline",
       "repair": "Reparar Caché Offline",
       "repairDesc": "Corregir marcadores offline perdidos durante escaneos de biblioteca",
       "manageCache": "Administrar Caché Offline",
-      "manageCacheDesc": "Abrir la carpeta de caché en tu administrador de archivos",
-      "openFolderDesc": "Abrir la carpeta de caché en tu gestor de archivos",
+      "manageCacheDesc": "Explora y administra pistas y álbumes descargados",
+      "openFolderDesc": "Explora y administra pistas y álbumes descargados",
       "sectionSummary": "Pistas en caché para reproducción offline",
       "repairing": "Reparando..."
     },

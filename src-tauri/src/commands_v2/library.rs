@@ -1587,8 +1587,24 @@ pub async fn v2_get_offline_cache_stats(
 pub async fn v2_set_offline_cache_limit(
     limit_mb: Option<u64>,
     cache_state: State<'_, OfflineCacheState>,
+    offline_state: State<'_, OfflineState>,
 ) -> Result<(), String> {
     let limit_bytes = limit_mb.map(|mb| mb * 1024 * 1024);
+
+    // Persist to offline_settings.db so the limit survives across restarts.
+    {
+        let store_guard = offline_state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = store_guard
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        store.set_cache_limit_bytes(limit_bytes)?;
+    }
+
+    // Update in-memory limit so subsequent reads / pre-flight checks see the
+    // new value without waiting for a session restart.
     let mut limit = cache_state.limit_bytes.lock().await;
     *limit = limit_bytes;
     Ok(())

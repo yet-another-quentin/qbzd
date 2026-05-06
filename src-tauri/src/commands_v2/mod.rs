@@ -80,3 +80,6 @@ pub use diagnostics::*;
 
 mod mixtapes;
 pub use mixtapes::*;
+
+pub mod offline_cache;
+pub use offline_cache::*;

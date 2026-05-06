@@ -1147,6 +1147,72 @@
     "showNetworkFoldersDesc": "Display content from network-mounted folders (NAS, Samba, etc.) while in manual offline mode",
     "checkNow": "Check now"
   },
+  "offlineManager": {
+    "title": "Offline cache",
+    "stats": {
+      "totals": "{tracks} tracks · {albums} albums · {artists} artists",
+      "usage": "{used} of {limit}",
+      "unlimited": "{used} of unlimited"
+    },
+    "sort": {
+      "label": "Sort",
+      "alpha": "A–Z",
+      "recent": "Most recent",
+      "largest": "Largest first",
+      "smallest": "Smallest first"
+    },
+    "filter": {
+      "showOnlyFailed": "Show only failed"
+    },
+    "row": {
+      "completeNTracks": "Complete · {count} tracks",
+      "partialNCached": "Partial · {count} cached",
+      "mixedQuality": "Mixed",
+      "nFailed": "{count} failed",
+      "actions": {
+        "redownloadAlbum": "Re-download all tracks",
+        "removeAlbum": "Remove from offline",
+        "retryFailed": "Retry failed",
+        "goToAlbum": "Go to album"
+      }
+    },
+    "track": {
+      "actions": {
+        "redownloadTrack": "Re-download track",
+        "removeTrack": "Remove from offline"
+      }
+    },
+    "confirmRemoveAlbum": {
+      "title": "Remove from offline cache?",
+      "body": "Remove \"{album}\" from offline cache. This will free {size}."
+    },
+    "confirmRemoveTrack": {
+      "title": "Remove track from offline cache?",
+      "body": "Remove \"{title}\" from offline cache."
+    },
+    "toast": {
+      "redownloadingAlbum": "Re-downloading {count} tracks…",
+      "redownloadingTrack": "Re-downloading track…",
+      "removedAlbum": "Removed {album} ({size} freed)",
+      "removedTrack": "Removed track",
+      "limitTooLow": "Limit must be at least 5 GB",
+      "limitSaved": "Cache limit saved"
+    },
+    "limitModal": {
+      "title": "Cache size limit",
+      "helper": "Minimum 5 GB. High-quality tracks need space.",
+      "inputLabel": "Limit (GB)",
+      "editAria": "Edit cache size limit"
+    },
+    "empty": {
+      "title": "No offline content yet",
+      "body": "Mark tracks as available offline from any album or playlist.",
+      "cta": "Go to Favorites"
+    },
+    "singlesPseudoAlbum": "Singles & loose tracks",
+    "discographyHeading": "Discography",
+    "albumsCount": "{count} albums"
+  },
   "performerRoles": {
     "a&R": "Artists and Repertoire",
     "a&RDirector": "Artists and Repertoire Director",
@@ -2591,12 +2657,12 @@
       "showInLibrary": "Show in Local Library",
       "showInLibraryDesc": "Display offline cached tracks in the Local Library view",
       "clearCache": "Clear All",
-      "openFolder": "Open Folder",
+      "openFolder": "Manage offline cache",
       "repair": "Repair Offline Cache",
       "repairDesc": "Fix offline markers lost during library scans",
       "manageCache": "Manage Offline Cache",
-      "manageCacheDesc": "Open the cache folder in your file manager",
-      "openFolderDesc": "Open the cache folder in your file manager",
+      "manageCacheDesc": "Browse and manage downloaded tracks and albums",
+      "openFolderDesc": "Browse and manage downloaded tracks and albums",
       "sectionSummary": "Cached tracks for offline playback",
       "repairing": "Repairing..."
     },

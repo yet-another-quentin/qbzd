@@ -210,6 +210,16 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     // Cache-dir stores
     offline_cache.init_at(&cache_dir).await?;
     offline_cache.init_library_connection(&data_dir).await?;
+    // Apply user's persisted offline cache size limit (Fix #5c). Runs after
+    // both `offline.init_at` (above) and `offline_cache.init_at` so the DB
+    // handle is available. Falls back silently to the 5 GB default when
+    // unset.
+    if let Err(e) = offline_cache.apply_persisted_limit(&offline).await {
+        log::warn!(
+            "[SessionLifecycle] Failed to apply persisted offline cache limit: {} (using default)",
+            e
+        );
+    }
     lyrics.init_at(&cache_dir).await?;
 
     // Run deferred subscription purge check

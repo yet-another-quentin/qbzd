@@ -1147,6 +1147,72 @@
     "showNetworkFoldersDesc": "Exibir conteúdo de pastas montadas em rede (NAS, Samba, etc.) no modo offline manual",
     "checkNow": "Verificar agora"
   },
+  "offlineManager": {
+    "title": "Cache offline",
+    "stats": {
+      "totals": "{tracks} faixas · {albums} álbuns · {artists} artistas",
+      "usage": "{used} de {limit}",
+      "unlimited": "{used} de ilimitado"
+    },
+    "sort": {
+      "label": "Ordenar",
+      "alpha": "A–Z",
+      "recent": "Mais recente",
+      "largest": "Maior tamanho primeiro",
+      "smallest": "Menor tamanho primeiro"
+    },
+    "filter": {
+      "showOnlyFailed": "Mostrar apenas falhas"
+    },
+    "row": {
+      "completeNTracks": "Completo · {count} faixas",
+      "partialNCached": "Parcial · {count} em cache",
+      "mixedQuality": "Misto",
+      "nFailed": "{count} falhas",
+      "actions": {
+        "redownloadAlbum": "Baixar todas as faixas novamente",
+        "removeAlbum": "Remover do offline",
+        "retryFailed": "Tentar falhas novamente",
+        "goToAlbum": "Ir ao álbum"
+      }
+    },
+    "track": {
+      "actions": {
+        "redownloadTrack": "Baixar faixa novamente",
+        "removeTrack": "Remover do offline"
+      }
+    },
+    "confirmRemoveAlbum": {
+      "title": "Remover do cache offline?",
+      "body": "Remover \"{album}\" do cache offline. Isso liberará {size}."
+    },
+    "confirmRemoveTrack": {
+      "title": "Remover faixa do cache offline?",
+      "body": "Remover \"{title}\" do cache offline."
+    },
+    "toast": {
+      "redownloadingAlbum": "Baixando {count} faixas novamente…",
+      "redownloadingTrack": "Baixando faixa novamente…",
+      "removedAlbum": "Álbum {album} removido ({size} liberado)",
+      "removedTrack": "Faixa removida",
+      "limitTooLow": "O limite deve ser de pelo menos 5 GB",
+      "limitSaved": "Limite do cache salvo"
+    },
+    "limitModal": {
+      "title": "Limite do cache",
+      "helper": "Mínimo de 5 GB. Faixas em alta qualidade exigem espaço.",
+      "inputLabel": "Limite (GB)",
+      "editAria": "Editar limite do cache"
+    },
+    "empty": {
+      "title": "Nenhum conteúdo offline ainda",
+      "body": "Marque faixas como disponíveis offline em qualquer álbum ou playlist.",
+      "cta": "Ir aos Favoritos"
+    },
+    "singlesPseudoAlbum": "Singles e faixas avulsas",
+    "discographyHeading": "Discografia",
+    "albumsCount": "{count} álbuns"
+  },
   "performerRoles": {
     "a&R": "Artistas e Repertório",
     "acousticGuitar": "Guitarra acústica",
@@ -2585,12 +2651,12 @@
       "showInLibrary": "Mostrar na Biblioteca Local",
       "showInLibraryDesc": "Exibir faixas offline em cache na visualização da Biblioteca Local",
       "clearCache": "Limpar Tudo",
-      "openFolder": "Abrir Pasta",
+      "openFolder": "Gerenciar cache offline",
       "repair": "Reparar Cache Offline",
       "repairDesc": "Corrigir marcações offline perdidas durante varreduras da biblioteca",
       "manageCache": "Gerenciar Cache Offline",
-      "manageCacheDesc": "Abrir a pasta de cache no seu gerenciador de arquivos",
-      "openFolderDesc": "Abrir a pasta de cache no seu gerenciador de arquivos",
+      "manageCacheDesc": "Navegar e gerenciar faixas e álbuns baixados",
+      "openFolderDesc": "Navegar e gerenciar faixas e álbuns baixados",
       "sectionSummary": "Faixas em cache para reprodução offline",
       "repairing": "Reparando..."
     },

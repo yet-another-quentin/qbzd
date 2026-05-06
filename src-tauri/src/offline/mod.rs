@@ -155,6 +155,12 @@ impl OfflineStore {
             "ALTER TABLE offline_settings ADD COLUMN pre_offline_stream_first_track INTEGER",
             "ALTER TABLE pending_playlist_sync ADD COLUMN local_track_ids TEXT",
             "ALTER TABLE pending_playlist_sync ADD COLUMN local_track_paths TEXT",
+            // Persisted offline cache size limit in bytes.
+            // NULL means "no explicit value set" — application layer falls
+            // back to the 5 GB default (see OfflineCacheState seed at session
+            // activation). Once the user sets a value through the UI, it is
+            // persisted as a non-NULL integer.
+            "ALTER TABLE offline_settings ADD COLUMN cache_limit_bytes INTEGER",
         ];
 
         for migration in migrations {
@@ -270,6 +276,36 @@ impl OfflineStore {
                 params![enabled as i64],
             )
             .map_err(|e| format!("Failed to set show network folders in manual offline: {}", e))?;
+        Ok(())
+    }
+
+    /// Read the persisted offline cache size limit in bytes.
+    ///
+    /// Returns:
+    /// - `Some(bytes)` when a value has been persisted via the UI.
+    /// - `None` when the column is NULL (legacy installs, never written).
+    ///   The application layer interprets this as "fall back to default".
+    pub fn get_cache_limit_bytes(&self) -> Result<Option<u64>, String> {
+        self.conn
+            .query_row(
+                "SELECT cache_limit_bytes FROM offline_settings WHERE id = 1",
+                [],
+                |row| row.get::<_, Option<i64>>(0),
+            )
+            .map(|opt| opt.map(|v| v as u64))
+            .map_err(|e| format!("Failed to read cache_limit_bytes: {}", e))
+    }
+
+    /// Persist the offline cache size limit. `None` clears the column to NULL
+    /// (no value set); `Some(bytes)` writes the value verbatim.
+    pub fn set_cache_limit_bytes(&self, limit: Option<u64>) -> Result<(), String> {
+        let param: Option<i64> = limit.map(|v| v as i64);
+        self.conn
+            .execute(
+                "UPDATE offline_settings SET cache_limit_bytes = ?1 WHERE id = 1",
+                params![param],
+            )
+            .map_err(|e| format!("Failed to set cache_limit_bytes: {}", e))?;
         Ok(())
     }
 

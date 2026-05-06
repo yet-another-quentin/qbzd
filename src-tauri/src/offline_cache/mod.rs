@@ -9,6 +9,7 @@
 pub mod cmaf_store;
 pub mod db;
 pub mod downloader;
+pub mod maintenance;
 pub mod metadata;
 pub mod migration;
 pub mod path_validator;
@@ -164,8 +165,8 @@ impl OfflineCacheState {
         let db_path = cache_dir.join("index.db");
         let db = OfflineCacheDb::new(&db_path)?;
 
-        // Default limit: 2GB
-        let default_limit = Some(2 * 1024 * 1024 * 1024u64);
+        // Default limit: 5GB
+        let default_limit = Some(5 * 1024 * 1024 * 1024u64);
 
         let state = Self {
             db: Arc::new(Mutex::new(Some(db))),
@@ -190,7 +191,7 @@ impl OfflineCacheState {
             db: Arc::new(Mutex::new(None)),
             fetcher: Arc::new(StreamFetcher::new()),
             cache_dir: Arc::new(RwLock::new(cache_dir)),
-            limit_bytes: Arc::new(Mutex::new(Some(2 * 1024 * 1024 * 1024u64))),
+            limit_bytes: Arc::new(Mutex::new(Some(5 * 1024 * 1024 * 1024u64))),
             cache_semaphore: Arc::new(Semaphore::new(3)),
             library_db: Arc::new(Mutex::new(None)),
         }
@@ -257,5 +258,41 @@ impl OfflineCacheState {
     pub fn get_cache_path(&self) -> String {
         let dir = self.cache_dir.read().unwrap();
         dir.to_string_lossy().to_string()
+    }
+
+    /// Seed the in-memory `limit_bytes` from the persisted offline_settings DB.
+    ///
+    /// Called at session activation (after `init_at`) so the user's previously
+    /// chosen limit survives across restarts. When the persisted value is
+    /// missing (legacy installs with NULL column), the default 5 GB seeded by
+    /// `init_at`/`new` is preserved.
+    pub async fn apply_persisted_limit(
+        &self,
+        offline_state: &crate::offline::OfflineState,
+    ) -> Result<(), String> {
+        let persisted: Option<u64> = {
+            let guard = offline_state
+                .store
+                .lock()
+                .map_err(|e| format!("Lock error: {}", e))?;
+            match guard.as_ref() {
+                Some(store) => store.get_cache_limit_bytes()?,
+                None => return Ok(()),
+            }
+        };
+
+        if let Some(bytes) = persisted {
+            let mut limit = self.limit_bytes.lock().await;
+            *limit = Some(bytes);
+            log::info!(
+                "Offline cache: applied persisted size limit ({} bytes)",
+                bytes
+            );
+        } else {
+            log::info!(
+                "Offline cache: no persisted size limit, keeping in-memory default"
+            );
+        }
+        Ok(())
     }
 }

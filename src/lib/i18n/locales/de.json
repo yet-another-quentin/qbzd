@@ -1147,6 +1147,72 @@
     "showNetworkFoldersDesc": "Inhalte aus eingebundenen Netzwerkordnern (NAS, Samba usw.) im manuellen Offline-Modus anzeigen",
     "checkNow": "Jetzt pruefen"
   },
+  "offlineManager": {
+    "title": "Offline-Cache",
+    "stats": {
+      "totals": "{tracks} Titel · {albums} Alben · {artists} Künstler",
+      "usage": "{used} von {limit}",
+      "unlimited": "{used} von unbegrenzt"
+    },
+    "sort": {
+      "label": "Sortieren",
+      "alpha": "A–Z",
+      "recent": "Neueste zuerst",
+      "largest": "Größte zuerst",
+      "smallest": "Kleinste zuerst"
+    },
+    "filter": {
+      "showOnlyFailed": "Nur fehlgeschlagene anzeigen"
+    },
+    "row": {
+      "completeNTracks": "Vollständig · {count} Titel",
+      "partialNCached": "Teilweise · {count} im Cache",
+      "mixedQuality": "Gemischt",
+      "nFailed": "{count} fehlgeschlagen",
+      "actions": {
+        "redownloadAlbum": "Alle Titel erneut herunterladen",
+        "removeAlbum": "Aus Offline entfernen",
+        "retryFailed": "Fehlgeschlagene erneut versuchen",
+        "goToAlbum": "Zum Album"
+      }
+    },
+    "track": {
+      "actions": {
+        "redownloadTrack": "Titel neu herunterladen",
+        "removeTrack": "Aus Offline entfernen"
+      }
+    },
+    "confirmRemoveAlbum": {
+      "title": "Aus Offline-Cache entfernen?",
+      "body": "\"{album}\" aus dem Offline-Cache entfernen. Dadurch werden {size} freigegeben."
+    },
+    "confirmRemoveTrack": {
+      "title": "Titel aus Offline-Cache entfernen?",
+      "body": "\"{title}\" aus dem Offline-Cache entfernen."
+    },
+    "toast": {
+      "redownloadingAlbum": "{count} Titel werden erneut heruntergeladen…",
+      "redownloadingTrack": "Titel wird erneut heruntergeladen…",
+      "removedAlbum": "{album} entfernt ({size} freigegeben)",
+      "removedTrack": "Titel entfernt",
+      "limitTooLow": "Das Limit muss mindestens 5 GB betragen",
+      "limitSaved": "Cache-Limit gespeichert"
+    },
+    "limitModal": {
+      "title": "Cache-Größenlimit",
+      "helper": "Mindestens 5 GB. Hochwertige Titel benötigen Speicherplatz.",
+      "inputLabel": "Limit (GB)",
+      "editAria": "Cache-Größenlimit bearbeiten"
+    },
+    "empty": {
+      "title": "Noch keine Offline-Inhalte",
+      "body": "Markiere Titel aus Alben oder Playlists als offline verfügbar.",
+      "cta": "Zu Favoriten"
+    },
+    "singlesPseudoAlbum": "Singles & lose Titel",
+    "discographyHeading": "Diskografie",
+    "albumsCount": "{count} Alben"
+  },
   "performerRoles": {
     "a&R": "Künstler und Repertoire",
     "acousticGuitar": "Akustikgitarre",
@@ -2583,12 +2649,12 @@
       "cachedTracks": "Offline-Titel",
       "cachedTracksDesc": "Zwischengespeicherte Titel für die Offline-Wiedergabe",
       "clearCache": "Alles löschen",
-      "openFolder": "Ordner öffnen",
+      "openFolder": "Offline-Cache verwalten",
       "repair": "Offline-Bibliothek reparieren",
       "repairDesc": "Offline-Markierungen reparieren, die während Bibliotheksscans verloren gingen",
       "manageCache": "Offline-Cache verwalten",
-      "manageCacheDesc": "Öffne den Cache-Ordner in deinem Dateimanager",
-      "openFolderDesc": "Öffne den Cache-Ordner in deinem Dateimanager",
+      "manageCacheDesc": "Heruntergeladene Titel und Alben durchsuchen und verwalten",
+      "openFolderDesc": "Heruntergeladene Titel und Alben durchsuchen und verwalten",
       "sectionSummary": "Zwischengespeicherte Titel für die Offline-Wiedergabe",
       "repairing": "Reparieren...",
       "showInLibrary": "In der lokalen Bibliothek anzeigen",

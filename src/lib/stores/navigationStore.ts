@@ -45,7 +45,8 @@ export type ViewType =
   | 'mixtapes'
   | 'collections'
   | 'mixtape-detail'
-  | 'discography-builder';
+  | 'discography-builder'
+  | 'offline-manager';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'labels' | 'playlists';
 
 // History entry: view + optional item identifier for granular back/forward

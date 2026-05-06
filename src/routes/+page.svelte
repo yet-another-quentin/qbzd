@@ -193,6 +193,7 @@
   import CollectionsView from '$lib/components/views/CollectionsView.svelte';
   import MixtapeCollectionDetailView from '$lib/components/views/MixtapeCollectionDetailView.svelte';
   import DiscographyBuilderView from '$lib/components/views/DiscographyBuilderView.svelte';
+  import OfflineCacheManagerView from '$lib/components/views/OfflineCacheManagerView.svelte';
   import {
     collectionsStore,
     createCollection,
@@ -723,6 +724,11 @@
         return 'library';
       case 'purchase-album':
         return 'purchases';
+      // Offline cache manager is intentionally NOT persisted as last_view to
+      // avoid Phantom CSS Error Cause 3 on rehydration when the cache DB is
+      // not yet ready at first paint. Fall back to settings (its entry point).
+      case 'offline-manager':
+        return 'settings';
       default:
         return 'home';
     }
@@ -6587,6 +6593,12 @@
             <p>No artist selected.</p>
           </div>
         {/if}
+      {:else if activeView === 'offline-manager'}
+        <OfflineCacheManagerView
+          onBack={() => navigateTo('settings')}
+          onGoToAlbum={(albumId) => handleAlbumClick(albumId)}
+          onGoToFavorites={() => navigateToFavorites()}
+        />
       {:else}
         <!-- Catch-all fallback: view has no matching data, show loading/error -->
         <div class="view-error">

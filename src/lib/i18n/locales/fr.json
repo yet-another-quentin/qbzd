@@ -1147,6 +1147,72 @@
     "showNetworkFoldersDesc": "Afficher le contenu des dossiers montés en réseau (NAS, Samba, etc.) en mode hors ligne manuel",
     "checkNow": "Vérifier maintenant"
   },
+  "offlineManager": {
+    "title": "Cache hors-ligne",
+    "stats": {
+      "totals": "{tracks} pistes · {albums} albums · {artists} artistes",
+      "usage": "{used} sur {limit}",
+      "unlimited": "{used} sur illimité"
+    },
+    "sort": {
+      "label": "Trier",
+      "alpha": "A–Z",
+      "recent": "Plus récent",
+      "largest": "Plus grand d'abord",
+      "smallest": "Plus petit d'abord"
+    },
+    "filter": {
+      "showOnlyFailed": "Afficher uniquement les échecs"
+    },
+    "row": {
+      "completeNTracks": "Complet · {count} pistes",
+      "partialNCached": "Partiel · {count} en cache",
+      "mixedQuality": "Mixte",
+      "nFailed": "{count} échec(s)",
+      "actions": {
+        "redownloadAlbum": "Re-télécharger toutes les pistes",
+        "removeAlbum": "Retirer du hors-ligne",
+        "retryFailed": "Réessayer les échecs",
+        "goToAlbum": "Aller à l'album"
+      }
+    },
+    "track": {
+      "actions": {
+        "redownloadTrack": "Retélécharger la piste",
+        "removeTrack": "Retirer du hors-ligne"
+      }
+    },
+    "confirmRemoveAlbum": {
+      "title": "Retirer du cache hors-ligne ?",
+      "body": "Retirer \"{album}\" du cache hors-ligne. Cela libérera {size}."
+    },
+    "confirmRemoveTrack": {
+      "title": "Retirer la piste du cache hors-ligne ?",
+      "body": "Retirer \"{title}\" du cache hors-ligne."
+    },
+    "toast": {
+      "redownloadingAlbum": "Retéléchargement de {count} pistes…",
+      "redownloadingTrack": "Retéléchargement de la piste…",
+      "removedAlbum": "Album {album} retiré ({size} libéré)",
+      "removedTrack": "Piste retirée",
+      "limitTooLow": "La limite doit être d'au moins 5 Go",
+      "limitSaved": "Limite du cache enregistrée"
+    },
+    "limitModal": {
+      "title": "Taille maximale du cache",
+      "helper": "Minimum 5 Go. Les pistes haute qualité prennent de la place.",
+      "inputLabel": "Limite (Go)",
+      "editAria": "Modifier la taille du cache"
+    },
+    "empty": {
+      "title": "Aucun contenu hors-ligne",
+      "body": "Marquez des pistes comme disponibles hors-ligne depuis n'importe quel album ou playlist.",
+      "cta": "Aller aux Favoris"
+    },
+    "singlesPseudoAlbum": "Singles et pistes isolées",
+    "discographyHeading": "Discographie",
+    "albumsCount": "{count} albums"
+  },
   "performerRoles": {
     "a&R": "Artistes et répertoire",
     "acousticGuitar": "Guitare acoustique",
@@ -2585,12 +2651,12 @@
       "showInLibrary": "Afficher dans la bibliothèque locale",
       "showInLibraryDesc": "Affiche les morceaux mis en cache hors ligne dans la bibliothèque locale.",
       "clearCache": "Tout effacer",
-      "openFolder": "Ouvrir le dossier",
+      "openFolder": "Gérer le cache hors-ligne",
       "repair": "Réparer la bibliothèque hors ligne",
       "repairDesc": "Corriger les marqueurs hors ligne perdus lors des analyses de la bibliothèque",
       "manageCache": "Gérer le cache hors ligne",
-      "manageCacheDesc": "Ouvrir le dossier du cache dans votre gestionnaire de fichiers",
-      "openFolderDesc": "Ouvrir le dossier du cache dans votre gestionnaire de fichiers",
+      "manageCacheDesc": "Parcourir et gérer les titres et albums téléchargés",
+      "openFolderDesc": "Parcourir et gérer les titres et albums téléchargés",
       "sectionSummary": "Titres mis en cache pour lecture hors ligne",
       "repairing": "Réparation..."
     },

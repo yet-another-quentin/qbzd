@@ -9,6 +9,7 @@
 pub mod cmaf_store;
 pub mod db;
 pub mod downloader;
+pub mod maintenance;
 pub mod metadata;
 pub mod migration;
 pub mod path_validator;

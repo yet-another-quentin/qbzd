@@ -315,7 +315,37 @@
                   {#if album.failedCount > 0}
                     {$t('offlineManager.row.nFailed', { values: { count: album.failedCount } })}
                   {:else if album.worstStatus === 'downloading'}
-                    ⟳
+                    {@const downloadingTracks = album.cachedTracks.filter(track => track.status === 'downloading')}
+                    {@const avgProgress = downloadingTracks.length === 0
+                      ? 0
+                      : downloadingTracks.reduce((s, track) => s + track.progressPercent, 0) / downloadingTracks.length}
+                    {@const r = 7}
+                    {@const circumference = 2 * Math.PI * r}
+                    <svg class="progress-ring" width="16" height="16" viewBox="0 0 16 16">
+                      <circle class="ring-bg" cx="8" cy="8" r={r} />
+                      <circle
+                        class="ring-fill"
+                        cx="8"
+                        cy="8"
+                        r={r}
+                        stroke-dasharray={circumference}
+                        stroke-dashoffset={circumference * (1 - avgProgress / 100)}
+                      />
+                    </svg>
+                  {:else if album.worstStatus === 'queued'}
+                    {@const r = 7}
+                    {@const circumference = 2 * Math.PI * r}
+                    <svg class="progress-ring indeterminate" width="16" height="16" viewBox="0 0 16 16">
+                      <circle class="ring-bg" cx="8" cy="8" r={r} />
+                      <circle
+                        class="ring-fill"
+                        cx="8"
+                        cy="8"
+                        r={r}
+                        stroke-dasharray={circumference}
+                        stroke-dashoffset={circumference * 0.25}
+                      />
+                    </svg>
                   {:else}
                     ✓
                   {/if}
@@ -354,11 +384,35 @@
                         {#if track.status === 'failed'}
                           <span title={track.errorMessage ?? ''}>⚠</span>
                         {:else if track.status === 'downloading'}
-                          ⟳
+                          {@const r = 7}
+                          {@const circumference = 2 * Math.PI * r}
+                          <svg class="progress-ring" width="16" height="16" viewBox="0 0 16 16">
+                            <circle class="ring-bg" cx="8" cy="8" r={r} />
+                            <circle
+                              class="ring-fill"
+                              cx="8"
+                              cy="8"
+                              r={r}
+                              stroke-dasharray={circumference}
+                              stroke-dashoffset={circumference * (1 - track.progressPercent / 100)}
+                            />
+                          </svg>
                         {:else if track.status === 'ready'}
                           ✓
                         {:else}
-                          …
+                          {@const r = 7}
+                          {@const circumference = 2 * Math.PI * r}
+                          <svg class="progress-ring indeterminate" width="16" height="16" viewBox="0 0 16 16">
+                            <circle class="ring-bg" cx="8" cy="8" r={r} />
+                            <circle
+                              class="ring-fill"
+                              cx="8"
+                              cy="8"
+                              r={r}
+                              stroke-dasharray={circumference}
+                              stroke-dashoffset={circumference * 0.25}
+                            />
+                          </svg>
                         {/if}
                       </span>
                       <div class="track-menu">
@@ -555,4 +609,15 @@
     object-fit: cover;
     background: var(--bg-tertiary);
   }
+  .progress-ring { transform: rotate(-90deg); display: inline-block; vertical-align: middle; }
+  .ring-bg { fill: none; stroke: var(--bg-tertiary, #333); stroke-width: 1.5; }
+  .ring-fill {
+    fill: none;
+    stroke: var(--accent-primary);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 300ms ease;
+  }
+  .progress-ring.indeterminate { animation: ocm-spin 1.2s linear infinite; }
+  @keyframes ocm-spin { to { transform: rotate(270deg); } }
 </style>

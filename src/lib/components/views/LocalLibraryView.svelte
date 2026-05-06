@@ -1394,6 +1394,10 @@
     // Load tab preferences first so the initial render uses the saved order.
     await loadLibraryPreferences();
     await loadLibraryData();
+    // Trigger the active tab's loader now that activeTab reflects user prefs.
+    // Without this, a user whose first visible tab is e.g. 'tracks' lands on
+    // an empty list because loadLibraryData only populates albums/folders.
+    ensureActiveTabDataLoaded();
     // Load folders (now safe in offline mode - uses library_get_folders instead)
     loadFolders(); // Load in background - doesn't block UI
     checkDiscogsCredentials();
@@ -1984,6 +1988,24 @@
     }
   }
 
+  /**
+   * Trigger the lazy loader for whichever tab is currently active. Used by
+   * `handleTabChange` and from `onMount` after preferences settle so the
+   * initial visible tab always fetches its data — otherwise users can land
+   * on Tracks (or any other configured first tab) and see an empty list.
+   * `'folders'` doesn't need a branch because `loadLibraryData()` already
+   * fetches the folder-grouped albums during mount/refresh.
+   */
+  function ensureActiveTabDataLoaded() {
+    if (activeTab === 'artists' && artists.length === 0) {
+      loadArtists();
+    } else if (activeTab === 'tracks' && tracks.length === 0) {
+      loadTracks(trackSearch.trim());
+    } else if (activeTab === 'albums' && !metadataAlbumsLoaded) {
+      loadMetadataAlbums();
+    }
+  }
+
   function handleTabChange(tab: TabType) {
     activeTab = tab;
 
@@ -1998,13 +2020,7 @@
     selectedAlbum = null;
     albumTracks = [];
 
-    if (tab === 'artists' && artists.length === 0) {
-      loadArtists();
-    } else if (tab === 'tracks' && tracks.length === 0) {
-      loadTracks(trackSearch.trim());
-    } else if (tab === 'albums' && !metadataAlbumsLoaded) {
-      loadMetadataAlbums();
-    }
+    ensureActiveTabDataLoaded();
   }
 
   async function handleAddFolder() {

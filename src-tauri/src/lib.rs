@@ -1254,24 +1254,28 @@ pub fn run(qconnect_cli_override: Option<bool>) {
                         }
                     }
 
-                    // Adaptive polling:
-                    // - fast (250ms) when playing - improves seekbar/lyrics sync
-                    // - slow (1000ms) when paused/stopped with a track loaded
-                    // - very slow (5000ms) when no track is loaded (idle)
+                    // Uniform 250ms polling cadence regardless of state.
                     //
-                    // The idle/paused branches would gate the first emit after a
-                    // play/pause/seek command by their full sleep duration. We
-                    // race the sleep against `PLAYBACK_STATE_WAKEUP`, which the
-                    // V2 playback commands signal after they mutate state, so
-                    // the loop reads the new state within milliseconds instead
-                    // of waiting up to 5 seconds for the next idle tick.
-                    let sleep_duration = if is_playing {
-                        std::time::Duration::from_millis(250)
-                    } else if track_id == 0 {
-                        std::time::Duration::from_millis(5000)
-                    } else {
-                        std::time::Duration::from_millis(1000)
-                    };
+                    // The earlier adaptive scheme used 5s when idle and 1s when
+                    // paused-with-track to save power. In practice the savings
+                    // were imperceptible (the loop only does atomic reads when
+                    // there's no state change, since `should_emit` filters all
+                    // no-op iterations) and the cost was visible: when play
+                    // starts, `play_data` is asynchronous — the audio thread
+                    // sets `is_playing` / `current_position` only after decoder
+                    // and device init (~500-2000ms). A wakeup fired at the end
+                    // of `v2_play_track` reads stale state, so the loop falls
+                    // back to its long sleep and the first emit reflecting the
+                    // real position arrives much later. By the time it lands,
+                    // `current_position()` (wall-clock based) is already past
+                    // second 0-1, so the seekbar appears to jump straight to 2+.
+                    //
+                    // Polling uniformly at 250ms catches the async transition
+                    // within one cadence and keeps the seekbar showing 0:00 →
+                    // 0:01 → 0:02 from the start. PLAYBACK_STATE_WAKEUP is kept
+                    // as the fast path for synchronous V2 commands (pause/
+                    // resume/stop/seek) — it still gives them sub-50ms response.
+                    let sleep_duration = std::time::Duration::from_millis(250);
                     tokio::select! {
                         _ = tokio::time::sleep(sleep_duration) => {},
                         _ = commands_v2::helpers::PLAYBACK_STATE_WAKEUP.notified() => {},

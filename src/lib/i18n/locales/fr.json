@@ -1170,7 +1170,7 @@
       "mixedQuality": "Mixte",
       "nFailed": "{count} échec(s)",
       "actions": {
-        "redownloadAlbum": "Retélécharger l'album",
+        "redownloadAlbum": "Re-télécharger toutes les pistes",
         "removeAlbum": "Retirer du hors-ligne",
         "retryFailed": "Réessayer les échecs",
         "goToAlbum": "Aller à l'album"

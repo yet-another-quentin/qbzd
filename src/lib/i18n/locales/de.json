@@ -1170,7 +1170,7 @@
       "mixedQuality": "Gemischt",
       "nFailed": "{count} fehlgeschlagen",
       "actions": {
-        "redownloadAlbum": "Album neu herunterladen",
+        "redownloadAlbum": "Alle Titel erneut herunterladen",
         "removeAlbum": "Aus Offline entfernen",
         "retryFailed": "Fehlgeschlagene erneut versuchen",
         "goToAlbum": "Zum Album"

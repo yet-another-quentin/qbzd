@@ -15,10 +15,10 @@
   let { isOpen, onClose, onSave, initialPreferences }: Props = $props();
 
   // Tab list known to this modal. Keep in sync with LocalLibraryView.TabType.
-  const availableTabs: string[] = ['tracks', 'folders', 'artists'];
+  const availableTabs: string[] = ['tracks', 'folders', 'albums', 'artists'];
 
   // Default preferences used by the "Reset" button.
-  const DEFAULT_TAB_ORDER: string[] = ['tracks', 'folders', 'artists'];
+  const DEFAULT_TAB_ORDER: string[] = ['tracks', 'folders', 'albums', 'artists'];
 
   let tabOrder = $state<string[]>([]);
   let hiddenTabs = $state<string[]>([]);

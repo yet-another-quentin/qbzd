@@ -2093,7 +2093,15 @@
       "resetConfirmDesc": "Dies setzt alle Audioausgabe-, Backend- und Wiedergabeeinstellungen auf die Standardwerte zurück. Die Wiedergabe wird gestoppt.",
       "resetSuccess": "Audio- und Wiedergabeeinstellungen wurden auf die Standardwerte zurückgesetzt.",
       "resetError": "Fehler beim Zurücksetzen der Audioeinstellungen: {error}",
-      "noDevicesFound": "Keine Geräte gefunden"
+      "noDevicesFound": "Keine Geräte gefunden",
+      "reserveDac": {
+        "label": "DAC für QBZ reservieren, solange es läuft",
+        "description": "Weist den Audio-Dienst des Systems an, diesen DAC in Ruhe zu lassen, solange QBZ geöffnet ist. Empfohlen, falls andere Apps deine Wiedergabe gelegentlich mit Benachrichtigungstönen unterbrechen. Standardmäßig deaktiviert.",
+        "statusActive": "Aktiv — das System-Audio bleibt fern.",
+        "statusContested": "Eine andere App hält diesen DAC mit höherer Priorität. Wir versuchen es erneut, wenn sie ihn freigibt.",
+        "statusUnavailable": "D-Bus ist in dieser Umgebung nicht verfügbar. Die Reservierung kann nicht angewendet werden.",
+        "wirePlumberNote": "Wenn dein System eine angepasste WirePlumber-Konfiguration hat, die Geräte-Reservierungen überschreibt, hat diese Einstellung möglicherweise keine Wirkung."
+      }
     },
     "playback": {
       "title": "Wiedergabe",

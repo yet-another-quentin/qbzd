@@ -2093,7 +2093,15 @@
       "resetConfirmTitle": "Reset Audio & Playback Settings?",
       "resetConfirmDesc": "This will reset all audio output, backend, and playback settings to defaults. Playback will be stopped.",
       "resetSuccess": "Audio and playback settings have been reset to defaults.",
-      "resetError": "Failed to reset audio settings: {error}"
+      "resetError": "Failed to reset audio settings: {error}",
+      "reserveDac": {
+        "label": "Reserve DAC for QBZ while running",
+        "description": "Tells the system audio service to leave this DAC alone while QBZ is open. Recommended if other apps occasionally interrupt your listening with notification sounds. Off by default.",
+        "statusActive": "Active — system audio is staying clear.",
+        "statusContested": "Another app currently holds this DAC at higher priority. Will retry when it releases.",
+        "statusUnavailable": "D-Bus unavailable in this environment. Reservation cannot be applied.",
+        "wirePlumberNote": "If your system has a custom WirePlumber configuration that overrides device reservation, this setting may have no effect."
+      }
     },
     "playback": {
       "title": "Playback",

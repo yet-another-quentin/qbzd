@@ -824,6 +824,31 @@
   let limitQualityToDevice = $state(false);  // Re-enabled in 1.2.x with manual per-device config
   let deviceMaxSampleRate = $state<number | null>(null);  // Per-device max sample rate
 
+  // Reserve DAC (Lifetime B): per-process DAC reservation via D-Bus / WirePlumber.
+  // Status polled every 5s while the row is rendered (only for ALSA card-specific devices).
+  type DacReservationStatus =
+    | { kind: 'inactive' }
+    | { kind: 'active' }
+    | { kind: 'contested'; holder: string; holder_priority: number }
+    | { kind: 'unavailable'; reason: string };
+  let reserveDacEnabled = $state(false);
+  let reserveDacStatus = $state<DacReservationStatus>({ kind: 'inactive' });
+
+  // Mirrors the backend's is_card_specific_device allow-list (qbz-audio side).
+  // Reservation only makes sense for card-bound ALSA prefixes; other devices
+  // hide the toggle entirely.
+  function isCardSpecificDevice(deviceId: string | undefined | null): boolean {
+    if (!deviceId) return false;
+    return (
+      deviceId.startsWith('hw:') ||
+      deviceId.startsWith('plughw:') ||
+      deviceId.startsWith('front:') ||
+      deviceId.startsWith('surround') ||
+      deviceId.startsWith('iec958:') ||
+      deviceId.startsWith('hdmi:')
+    );
+  }
+
   // Sample rate options for the dropdown
   const sampleRateOptions = [
     { value: 44100, label: '44.1 kHz (CD)' },
@@ -982,6 +1007,29 @@
       ? 'settings.audio.dacPassthroughDisabledDesc'
       : null
   );
+
+  // Reserve DAC: only meaningful for card-specific ALSA devices.
+  // Resolves the backend device id (e.g. "hw:0,0") from the display description.
+  let reserveDacDeviceId = $derived(
+    outputDevice === 'System Default'
+      ? null
+      : (deviceByDisplayName.get(outputDevice)?.id ?? null)
+  );
+  let isHwDevice = $derived(isCardSpecificDevice(reserveDacDeviceId));
+
+  // Poll DAC reservation status every 5s while a card-specific device is
+  // selected and the toggle is on. Cleans up the interval on dep change /
+  // unmount.
+  $effect(() => {
+    if (!isHwDevice || !reserveDacEnabled) {
+      return;
+    }
+    void refreshReserveDacStatus();
+    const id = setInterval(() => {
+      void refreshReserveDacStatus();
+    }, 5000);
+    return () => clearInterval(id);
+  });
   let gaplessDisabled = $derived(streamingOnly);
   let gaplessDisabledReasonKey = $derived(
     streamingOnly
@@ -2775,6 +2823,7 @@
     skip_sink_switch: boolean;
     allow_quality_fallback: boolean;
     sync_audio_on_startup: boolean;
+    reserve_dac_while_running: boolean;
   }
 
   interface BackendInfo {
@@ -2934,6 +2983,7 @@
       skipSinkSwitch = settings.skip_sink_switch;
       allowQualityFallback = settings.allow_quality_fallback;
       syncAudioOnStartup = settings.sync_audio_on_startup;
+      reserveDacEnabled = settings.reserve_dac_while_running ?? false;
 
       // Load backend and plugin settings
       if (settings.backend_type) {
@@ -3056,6 +3106,31 @@
       console.log('[Audio] Exclusive mode changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change exclusive mode:', err);
+    }
+  }
+
+  // Reserve DAC handlers — pair with v2_set_reserve_dac_while_running and
+  // v2_get_dac_reservation_status. Each toggle is followed by an immediate
+  // status refresh so the indicator reflects the new state.
+  async function refreshReserveDacStatus() {
+    try {
+      reserveDacStatus = await invoke<DacReservationStatus>('v2_get_dac_reservation_status');
+    } catch (err) {
+      console.warn('[ReserveDac] status fetch failed:', err);
+    }
+  }
+
+  async function handleReserveDacChange(enabled: boolean) {
+    reserveDacEnabled = enabled;
+    try {
+      await invoke('v2_set_reserve_dac_while_running', { enabled });
+      await refreshReserveDacStatus();
+      console.log('[ReserveDac] reservation changed:', enabled);
+    } catch (err) {
+      console.error('[ReserveDac] Failed to set reservation:', err);
+      // Roll back to whatever the backend reports so UI stays in lock-step.
+      await refreshReserveDacStatus();
+      reserveDacEnabled = false;
     }
   }
 
@@ -4308,6 +4383,37 @@
       </div>
       <Toggle enabled={exclusiveMode} onchange={handleExclusiveModeChange} disabled={exclusiveModeDisabled} />
     </div>
+    {#if isHwDevice}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.reserveDac.label')}</span>
+        <span class="setting-desc">{$t('settings.audio.reserveDac.description')}</span>
+      </div>
+      <Toggle enabled={reserveDacEnabled} onchange={handleReserveDacChange} />
+    </div>
+    {#if reserveDacEnabled}
+    <div
+      class="reserve-dac-status"
+      class:status-active={reserveDacStatus.kind === 'active'}
+      class:status-contested={reserveDacStatus.kind === 'contested'}
+      class:status-unavailable={reserveDacStatus.kind === 'unavailable'}
+    >
+      {#if reserveDacStatus.kind === 'active'}
+        <span class="status-dot status-dot-green"></span>
+        <span>{$t('settings.audio.reserveDac.statusActive')}</span>
+      {:else if reserveDacStatus.kind === 'contested'}
+        <span class="status-dot status-dot-yellow"></span>
+        <span>{$t('settings.audio.reserveDac.statusContested')}</span>
+      {:else if reserveDacStatus.kind === 'unavailable'}
+        <span class="status-dot status-dot-grey"></span>
+        <span>{$t('settings.audio.reserveDac.statusUnavailable')}</span>
+      {/if}
+    </div>
+    <details class="reserve-dac-help">
+      <summary>{$t('settings.audio.reserveDac.wirePlumberNote')}</summary>
+    </details>
+    {/if}
+    {/if}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.dacPassthrough')} <span class="help-tip" title={$t('settings.audio.dacPassthroughHelp')}>(?)</span></span>
@@ -7099,6 +7205,45 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     color: var(--text-muted);
     opacity: 0.8;
     margin-top: 4px;
+  }
+
+  .reserve-dac-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-dot-green {
+    background: var(--success, #2ecc71);
+  }
+
+  .status-dot-yellow {
+    background: var(--warning, #f39c12);
+  }
+
+  .status-dot-grey {
+    background: var(--text-muted);
+  }
+
+  .reserve-dac-help {
+    padding: 4px 0 8px 0;
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.8;
+  }
+
+  .reserve-dac-help summary {
+    cursor: pointer;
   }
 
   .setting-row:has(.setting-note) {

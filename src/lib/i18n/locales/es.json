@@ -2902,7 +2902,9 @@
     "title": "Título",
     "album": "Album",
     "duration": "Duración",
-    "quality": "Calidad"
+    "quality": "Calidad",
+    "searchPlaceholder": "Buscar pistas…",
+    "noMatches": "Ninguna pista coincide con tu búsqueda."
   },
   "updates": {
     "snap": {

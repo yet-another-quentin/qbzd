@@ -2896,7 +2896,9 @@
     "album": "Álbum",
     "duration": "Duração",
     "quality": "Qualidade",
-    "title": "Título"
+    "title": "Título",
+    "searchPlaceholder": "Pesquisar faixas…",
+    "noMatches": "Nenhuma faixa corresponde à sua pesquisa."
   },
   "updates": {
     "snap": {

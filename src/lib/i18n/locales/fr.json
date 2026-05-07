@@ -2896,7 +2896,9 @@
     "title": "Titre",
     "album": "Album",
     "duration": "Durée",
-    "quality": "Qualité"
+    "quality": "Qualité",
+    "searchPlaceholder": "Rechercher des pistes…",
+    "noMatches": "Aucune piste ne correspond à votre recherche."
   },
   "updates": {
     "checkForUpdates": "Vérifier les mises à jour",

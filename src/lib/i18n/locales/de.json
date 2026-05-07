@@ -2896,7 +2896,9 @@
     "album": "Album",
     "duration": "Laufzeit",
     "quality": "Qualität",
-    "title": "Titel"
+    "title": "Titel",
+    "searchPlaceholder": "Titel suchen…",
+    "noMatches": "Keine Titel entsprechen deiner Suche."
   },
   "updates": {
     "snap": {

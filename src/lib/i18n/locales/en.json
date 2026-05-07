@@ -2902,7 +2902,9 @@
     "title": "Title",
     "album": "Album",
     "duration": "Duration",
-    "quality": "Quality"
+    "quality": "Quality",
+    "searchPlaceholder": "Search tracks…",
+    "noMatches": "No tracks match your search."
   },
   "updates": {
     "runningIn": "Running in {env}",

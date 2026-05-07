@@ -7,7 +7,7 @@
   import { onMount, onDestroy, tick, untrack } from 'svelte';
   import {
     HardDrive, Music, Disc3, MicVocal, FolderPlus, Trash2, RefreshCw,
-    Settings, ArrowLeft, X, Play, CircleAlert, ImageDown, Upload, Search, LayoutGrid, List, PenLine,
+    Settings, ArrowLeft, X, Play, CircleAlert, ImageDown, Upload, Search, LayoutGrid, List, ListOrdered, PenLine,
     Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check, SquareCheckBig, CassetteTape
   } from 'lucide-svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
@@ -3918,6 +3918,14 @@
             >
               <Trash2 size={16} />
             </button>
+            <button
+              class="icon-btn"
+              onclick={() => (isEditTabsModalOpen = true)}
+              aria-label={$t('library.editTabs.title')}
+              title={$t('library.editTabs.title')}
+            >
+              <ListOrdered size={16} />
+            </button>
           </div>
         </div>
 
@@ -4043,15 +4051,6 @@
               {$t(`library.${tab}`)}
             </button>
           {/each}
-          <button
-            type="button"
-            class="jump-link tab-edit-btn"
-            onclick={() => (isEditTabsModalOpen = true)}
-            aria-label={$t('library.editTabs.title')}
-            title={$t('library.editTabs.title')}
-          >
-            <Settings size={14} />
-          </button>
         </div>
       </div>
       <div class="page-search" class:open={searchOpen}>
@@ -5484,18 +5483,6 @@
   .jump-link.active {
     color: var(--text-primary);
     border-bottom-color: var(--accent-primary);
-  }
-
-  .jump-link.tab-edit-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    padding: 4px 6px;
-  }
-
-  .jump-link.tab-edit-btn:hover {
-    color: var(--text-primary);
   }
 
   /* Page Search in Nav */

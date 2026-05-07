@@ -475,12 +475,36 @@ pub(crate) fn parse_card_index(hw_device: &str) -> Result<u32, ReservationError>
     Err(ReservationError::InvalidDevice(hw_device.to_string()))
 }
 
-/// Resolve a symbolic ALSA card name (e.g., `"DacMagic"`) to its kernel index
-/// by iterating over `alsa::card::Iter`.
+/// Resolve a symbolic ALSA card name (e.g., `"C20"`, `"DacMagic"`, `"PCH"`)
+/// to its kernel index by iterating over `alsa::card::Iter`.
+///
+/// ALSA's `CARD=` parameter takes the card's *id* (short identifier like
+/// `"C20"`, `"PCH"`, `"Generic"`, `"HDMI"`) — NOT the long descriptive name
+/// (`"Cambridge Audio USB Audio 2.0"`). Verified against `aplay -l` output
+/// on the user's host:
+///
+/// ```text
+///     card 1: C20 [Cambridge Audio USB Audio 2.0], device 0: ...
+///              ^id ^long name
+/// ```
+///
+/// In `alsa-rs` 0.10, the short id is exposed as `ctl::CardInfo::get_id()`
+/// (a wrapper around `snd_ctl_card_info_get_id`). The convenience
+/// `Card::get_name()` actually returns the long name (it wraps
+/// `snd_card_get_name`, which despite the name returns the descriptive
+/// "Cambridge Audio USB Audio 2.0" string), so we cannot use it here. We
+/// open a `Ctl` per card and read the id from its `CardInfo`.
 fn resolve_card_index_by_name(name: &str) -> Result<u32, ReservationError> {
     for card in alsa::card::Iter::new() {
         let card = card.map_err(|e| ReservationError::AlsaError(e.to_string()))?;
-        let id = card.get_name().unwrap_or_default();
+        let ctl = alsa::ctl::Ctl::from_card(&card, true)
+            .map_err(|e| ReservationError::AlsaError(e.to_string()))?;
+        let info = ctl
+            .card_info()
+            .map_err(|e| ReservationError::AlsaError(e.to_string()))?;
+        let id = info
+            .get_id()
+            .map_err(|e| ReservationError::AlsaError(e.to_string()))?;
         if id == name {
             return Ok(card.get_index() as u32);
         }

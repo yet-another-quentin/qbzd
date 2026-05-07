@@ -2132,6 +2132,8 @@
     "appearance": {
       "title": "Apparence",
       "theme": "Thème",
+      "albumHeaderGradient": "Dégradé dans l'en-tête de l'album",
+      "albumHeaderGradientDesc": "Utilise la couleur dominante de la pochette comme arrière-plan dans la vue détaillée de l'album.",
       "themes": {
         "dark": "Sombre",
         "light": "Clair",

@@ -36,6 +36,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "lucide-svelte": "^1.0.1",
+    "node-vibrant": "^4.0.4",
     "svelte-i18n": "^4.0.0"
   },
   "devDependencies": {

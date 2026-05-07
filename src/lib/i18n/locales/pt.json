@@ -2132,6 +2132,8 @@
     "appearance": {
       "title": "Aparência",
       "theme": "Tema",
+      "albumHeaderGradient": "Gradiente no cabeçalho do álbum",
+      "albumHeaderGradientDesc": "Usa a cor dominante da capa como fundo na visualização de detalhes do álbum.",
       "themes": {
         "dark": "Escuro",
         "light": "Claro",

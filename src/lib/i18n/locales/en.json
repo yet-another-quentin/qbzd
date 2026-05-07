@@ -2132,6 +2132,8 @@
     "appearance": {
       "title": "Appearance",
       "theme": "Theme",
+      "albumHeaderGradient": "Album header gradient",
+      "albumHeaderGradientDesc": "Use the album cover's dominant color as a backdrop in album detail views.",
       "themes": {
         "dark": "Dark",
         "light": "Light",

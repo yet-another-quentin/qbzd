@@ -85,6 +85,10 @@
   } from '$lib/stores/degradedStore';
   import { showToast } from '$lib/stores/toastStore';
   import {
+    isAlbumHeaderGradientEnabled,
+    setAlbumHeaderGradient,
+  } from '$lib/stores/appearancePreferencesStore';
+  import {
     enableVerboseCapture,
     disableVerboseCapture,
     isVerboseCaptureEnabled
@@ -996,6 +1000,12 @@
 
   // Appearance settings
   let theme = $state('Dark');
+  let albumHeaderGradient = $state(isAlbumHeaderGradientEnabled());
+
+  function handleAlbumHeaderGradientToggle(enabled: boolean) {
+    setAlbumHeaderGradient(enabled);
+    albumHeaderGradient = enabled;
+  }
   let toastsEnabled = $state(true);
   let systemNotificationsEnabled = $state(true);
   let language = $state('Auto');
@@ -4500,6 +4510,14 @@
           onchange={handleThemeChange}
         />
       </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.albumHeaderGradient')}</span>
+        <small class="setting-note">{$t('settings.appearance.albumHeaderGradientDesc')}</small>
+      </div>
+      <Toggle enabled={albumHeaderGradient} onchange={handleAlbumHeaderGradientToggle} />
     </div>
 
     <!-- Auto-Theme generating overlay -->

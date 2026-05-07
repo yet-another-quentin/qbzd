@@ -2132,6 +2132,8 @@
     "appearance": {
       "title": "Apariencia",
       "theme": "Tema",
+      "albumHeaderGradient": "Degradado en el encabezado del álbum",
+      "albumHeaderGradientDesc": "Usa el color dominante de la portada como fondo en la vista de detalle del álbum.",
       "themes": {
         "dark": "Oscuro",
         "light": "Claro",

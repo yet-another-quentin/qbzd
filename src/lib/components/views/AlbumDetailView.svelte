@@ -34,6 +34,11 @@
   import BookletViewer from '../BookletViewer.svelte';
   import type { QobuzGoody } from '$lib/types';
   import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
+  import { extractPalette, pickHeaderColor, type ArtworkPalette } from '$lib/utils/artworkPalette';
+  import {
+    subscribe as subscribeAppearance,
+    isAlbumHeaderGradientEnabled,
+  } from '$lib/stores/appearancePreferencesStore';
 
   interface Track {
     id: number;
@@ -201,6 +206,25 @@
   let hasCustomCover = $state(false);
   let coverOverride = $state<string | null>(null);
   let scrollContainer: HTMLDivElement | null = $state(null);
+
+  // Header gradient driven by extracted artwork palette.
+  let gradientEnabled = $state(isAlbumHeaderGradientEnabled());
+  let artworkPalette = $state<ArtworkPalette | null>(null);
+  $effect(() => {
+    const url = coverOverride ?? album.artwork ?? null;
+    artworkPalette = null;
+    if (!url || !gradientEnabled) return;
+    extractPalette(url).then((p) => {
+      const current = coverOverride ?? album.artwork ?? null;
+      if (current === url) artworkPalette = p;
+    });
+  });
+  const headerColor = $derived(gradientEnabled ? pickHeaderColor(artworkPalette) : null);
+  const headerStyle = $derived.by(() => {
+    if (!headerColor) return '';
+    const needsScrim = headerColor.luminance > 0.6;
+    return `--art-bg: ${headerColor.hex}; --art-scrim: ${needsScrim ? '0.35' : '0'};`;
+  });
 
   // Multi-select
   let multiSelectMode = $state(false);
@@ -492,8 +516,13 @@
       }
     });
 
+    const unsubscribeAppearance = subscribeAppearance(() => {
+      gradientEnabled = isAlbumHeaderGradientEnabled();
+    });
+
     return () => {
       unsubscribe?.();
+      unsubscribeAppearance();
     };
   });
 
@@ -550,7 +579,7 @@
 </script>
 
 <ViewTransition duration={200} distance={12} direction="up">
-<div class="album-detail" bind:this={scrollContainer} onscroll={(e) => saveScrollPosition('album', (e.target as HTMLElement).scrollTop, album.id)}>
+<div class="album-detail" class:has-art-bg={!!headerColor} style={headerStyle} bind:this={scrollContainer} onscroll={(e) => saveScrollPosition('album', (e.target as HTMLElement).scrollTop, album.id)}>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
@@ -965,6 +994,47 @@
     height: 100%;
     padding: 8px 8px 100px 18px;
     overflow-y: auto;
+    position: relative;
+  }
+
+  .album-detail.has-art-bg::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 320px;
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, var(--art-scrim, 0)) 0%, rgba(0, 0, 0, 0) 100%),
+      linear-gradient(180deg, var(--art-bg, transparent) 0%, var(--art-bg, transparent) 30%, transparent 100%);
+    z-index: 0;
+    pointer-events: none;
+    transition: background 320ms ease;
+  }
+
+  .album-detail > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Lift secondary text contrast over the colored backdrop. */
+  .album-detail.has-art-bg .back-btn,
+  .album-detail.has-art-bg .album-info,
+  .album-detail.has-art-bg .album-quality,
+  .album-detail.has-art-bg .album-stats {
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  .album-detail.has-art-bg .back-btn:hover {
+    color: #fff;
+  }
+
+  .album-detail.has-art-bg .artist-link {
+    color: #fff;
+  }
+
+  .album-detail.has-art-bg .artist-link:hover {
+    text-decoration: underline;
   }
 
   /* Custom scrollbar */

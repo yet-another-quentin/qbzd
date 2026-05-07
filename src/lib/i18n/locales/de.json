@@ -2132,6 +2132,8 @@
     "appearance": {
       "title": "Darstellung",
       "theme": "Thema",
+      "albumHeaderGradient": "Farbverlauf im Album-Header",
+      "albumHeaderGradientDesc": "Verwende die dominante Farbe des Albumcovers als Hintergrund in der Albumdetailansicht.",
       "themes": {
         "dark": "Dunkel",
         "light": "Hell",

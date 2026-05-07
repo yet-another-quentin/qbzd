@@ -473,6 +473,36 @@ impl StreamType {
             StreamType::AlsaDirect(_) => None,
         }
     }
+
+    #[cfg(target_os = "macos")]
+    fn set_coreaudio_hardware_volume(&self, volume: f32) -> bool {
+        match self {
+            StreamType::CoreAudio {
+                _exclusive_guard: Some(guard),
+                ..
+            } => {
+                if let Err(e) = guard.set_hardware_volume(volume) {
+                    log::warn!("[CoreAudio] Hardware volume failed: {}", e);
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+fn apply_engine_volume(stream_opt: &Option<StreamType>, engine: &PlaybackEngine, volume: f32) {
+    #[cfg(target_os = "macos")]
+    if stream_opt
+        .as_ref()
+        .map(|stream| stream.set_coreaudio_hardware_volume(volume))
+        .unwrap_or(false)
+    {
+        engine.set_volume(1.0);
+        return;
+    }
+
+    engine.set_volume(volume);
 }
 
 /// Try to create output stream using the backend system (if configured)
@@ -1538,7 +1568,7 @@ impl Player {
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
-                            engine.set_volume(volume);
+                            apply_engine_volume(&stream_opt, &engine, volume);
 
                             let source = match decode_with_fallback(&data) {
                                 Ok(s) => s,
@@ -1876,7 +1906,7 @@ impl Player {
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
-                            engine.set_volume(volume);
+                            apply_engine_volume(&stream_opt, &engine, volume);
 
                             // Wait for minimum buffer before starting playback
                             log::info!("Streaming: waiting for initial buffer...");
@@ -2103,7 +2133,7 @@ impl Player {
 
                                 let volume =
                                     thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
-                                engine.set_volume(volume);
+                                apply_engine_volume(&stream_opt, &engine, volume);
 
                                 let source = match decode_with_fallback(&audio_data) {
                                     Ok(s) => s,
@@ -2201,7 +2231,7 @@ impl Player {
                                 .volume
                                 .store((volume * 100.0) as u64, Ordering::SeqCst);
                             if let Some(ref engine) = *current_engine {
-                                engine.set_volume(volume);
+                                apply_engine_volume(&stream_opt, &engine, volume);
                             }
                             log::info!("Audio thread: volume set to {}", volume);
                         }
@@ -2312,7 +2342,7 @@ impl Player {
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
-                            engine.set_volume(volume);
+                            apply_engine_volume(&stream_opt, &engine, volume);
 
                             // Build the decoded source for the seek. Both
                             // streaming and cached paths use Symphonia's native

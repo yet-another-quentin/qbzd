@@ -14,8 +14,10 @@ use coreaudio::audio_unit::{macos_helpers, Scope};
 use coreaudio::Error;
 #[cfg(target_os = "macos")]
 use objc2_core_audio::{
-    kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyElementMaster,
-    kAudioObjectPropertyScopeGlobal, AudioObjectGetPropertyData, AudioObjectPropertyAddress,
+    kAudioDevicePropertyNominalSampleRate, kAudioDevicePropertyVolumeScalar,
+    kAudioObjectPropertyElementMaster, kAudioObjectPropertyScopeGlobal,
+    kAudioObjectPropertyScopeOutput, AudioObjectGetPropertyData, AudioObjectHasProperty,
+    AudioObjectPropertyAddress, AudioObjectSetPropertyData,
 };
 #[cfg(target_os = "macos")]
 use std::{
@@ -160,6 +162,14 @@ pub fn resolve_output_device_id(device_name: Option<&str>) -> Result<AudioDevice
     }
 }
 
+/// Resolve an optional QBZ output device name to the exact CoreAudio device name.
+/// `None` means the current system default output device.
+#[cfg(target_os = "macos")]
+pub fn resolve_output_device_name(device_name: Option<&str>) -> Result<String, String> {
+    let device_id = resolve_output_device_id(device_name)?;
+    get_device_name(device_id)
+}
+
 /// Return the PID currently owning CoreAudio Hog Mode for this device.
 /// CoreAudio uses -1 when no process owns the device.
 #[cfg(target_os = "macos")]
@@ -224,6 +234,69 @@ pub fn set_hog_mode(device_id: AudioDeviceID, enabled: bool) -> Result<(), Strin
     Ok(())
 }
 
+/// Set a CoreAudio device's hardware output volume using scalar 0.0..1.0.
+/// Tries master output first, then common stereo channel elements.
+#[cfg(target_os = "macos")]
+pub fn set_hardware_volume(device_id: AudioDeviceID, volume: f32) -> Result<(), String> {
+    let clamped = volume.clamp(0.0, 1.0);
+    let mut last_error = None;
+    let mut channel_success = false;
+
+    for element in [kAudioObjectPropertyElementMaster, 1, 2] {
+        let property_address = AudioObjectPropertyAddress {
+            mSelector: kAudioDevicePropertyVolumeScalar,
+            mScope: kAudioObjectPropertyScopeOutput,
+            mElement: element,
+        };
+
+        let has_property =
+            unsafe { AudioObjectHasProperty(device_id, NonNull::from(&property_address)) };
+        if !has_property {
+            continue;
+        }
+
+        let mut value = clamped;
+        let status = unsafe {
+            AudioObjectSetPropertyData(
+                device_id,
+                NonNull::from(&property_address),
+                0,
+                null(),
+                mem::size_of::<f32>() as u32,
+                NonNull::new((&mut value as *mut f32).cast()).expect("volume pointer"),
+            )
+        };
+
+        if status == 0 {
+            log::debug!(
+                "[CoreAudio] Set hardware volume for device {} element {} to {:.0}%",
+                device_id,
+                element,
+                clamped * 100.0
+            );
+            if element == kAudioObjectPropertyElementMaster {
+                return Ok(());
+            }
+            channel_success = true;
+            continue;
+        }
+
+        last_error = Some(status);
+    }
+
+    if channel_success {
+        return Ok(());
+    }
+
+    Err(format!(
+        "CoreAudio device {} does not expose settable output hardware volume{}",
+        device_id,
+        last_error
+            .map(|status| format!(" (last OSStatus {})", status))
+            .unwrap_or_default()
+    ))
+}
+
 /// RAII owner for CoreAudio Hog Mode.
 #[cfg(target_os = "macos")]
 #[derive(Debug)]
@@ -250,6 +323,10 @@ impl CoreAudioExclusiveGuard {
         set_hog_mode(self.device_id, false)?;
         self.active = false;
         Ok(())
+    }
+
+    pub fn set_hardware_volume(&self, volume: f32) -> Result<(), String> {
+        set_hardware_volume(self.device_id, volume)
     }
 }
 

@@ -443,6 +443,28 @@ impl AudioBackend for CpalDefaultBackend {
     }
 
     fn create_output_stream(&self, config: &BackendConfig) -> BackendResult<MixerDeviceSink> {
+        #[cfg(target_os = "macos")]
+        let macos_exclusive_device_name = if config.exclusive_mode && config.device_id.is_none() {
+            match crate::coreaudio_direct::resolve_output_device_name(None) {
+                Ok(name) => {
+                    log::info!(
+                        "[CoreAudio] Resolved System Default to '{}' for exclusive stream",
+                        name
+                    );
+                    Some(name)
+                }
+                Err(e) => {
+                    log::warn!(
+                        "[CoreAudio] Could not resolve System Default device name: {}",
+                        e
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         // On macOS, only exclusive mode takes ownership of the device rate.
         // Shared mode must leave the user's current CoreAudio device rate alone.
         #[cfg(target_os = "macos")]
@@ -450,13 +472,23 @@ impl AudioBackend for CpalDefaultBackend {
             if config.exclusive_mode {
                 if let Some(ref device_id) = config.device_id {
                     Self::switch_sample_rate_if_needed(device_id, config.sample_rate);
+                } else if let Some(ref device_name) = macos_exclusive_device_name {
+                    Self::switch_sample_rate_if_needed(device_name, config.sample_rate);
                 } else {
                     Self::switch_default_device_rate_if_needed(config.sample_rate);
                 }
             }
         }
 
-        let device = if let Some(ref device_id) = config.device_id {
+        #[cfg(target_os = "macos")]
+        let effective_device_id = config
+            .device_id
+            .as_ref()
+            .or(macos_exclusive_device_name.as_ref());
+        #[cfg(not(target_os = "macos"))]
+        let effective_device_id = config.device_id.as_ref();
+
+        let device = if let Some(device_id) = effective_device_id {
             self.host
                 .output_devices()
                 .map_err(|e| format!("Failed to enumerate devices: {}", e))?

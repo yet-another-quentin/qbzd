@@ -62,6 +62,12 @@ pub struct AudioSettings {
     /// When true, automatically try lower quality tiers if the requested one fails.
     /// When false (default), playback or download fails if the exact quality is unavailable.
     pub allow_quality_fallback: bool,
+    /// When true, hold a per-process ALSA device reservation (Lifetime B) for the
+    /// configured output device while QBZ is running, so other PulseAudio/PipeWire
+    /// clients won't grab the DAC and break exclusive playback. Off by default.
+    /// See `qbz-nix-docs/specs/2026-05-07-alsa-exclusive-hardening-design.md`.
+    #[serde(default)]
+    pub reserve_dac_while_running: bool,
 }
 
 impl Default for AudioSettings {
@@ -88,6 +94,7 @@ impl Default for AudioSettings {
             quality_fallback_behavior: "ask".to_string(),
             skip_sink_switch: false, // Off by default — only for JACK/DAW routing setups
             allow_quality_fallback: false, // Off by default — fail rather than silently downgrade
+            reserve_dac_while_running: false, // Off by default — opt-in DAC reservation (Lifetime B)
         }
     }
 }
@@ -253,6 +260,9 @@ impl AudioSettingsStore {
                             .unwrap_or_else(|| "ask".to_string()),
                         skip_sink_switch: row.get::<_, Option<i64>>(19)?.unwrap_or(0) != 0,
                         allow_quality_fallback: row.get::<_, Option<i64>>(20)?.unwrap_or(0) != 0,
+                        // Persisted in Task 5 (Lifetime B). Default to false until the
+                        // DB column + setter exist; serde_default keeps JSON round-trips clean.
+                        reserve_dac_while_running: false,
                     })
                 },
             )
@@ -997,4 +1007,56 @@ pub fn reset_audio_settings(
     pb_store.reset_all()?;
 
     Ok(defaults)
+}
+
+#[cfg(test)]
+mod reserve_dac_tests {
+    use super::*;
+
+    #[test]
+    fn deserializes_legacy_json_without_field() {
+        // Legacy installs predate `reserve_dac_while_running`. Their persisted
+        // JSON does not contain the key; serde must default it to false rather
+        // than failing the round-trip.
+        let legacy = r#"{
+            "output_device": null,
+            "exclusive_mode": false,
+            "dac_passthrough": false,
+            "preferred_sample_rate": null,
+            "backend_type": null,
+            "alsa_plugin": null,
+            "alsa_hardware_volume": false,
+            "stream_first_track": false,
+            "stream_buffer_seconds": 3,
+            "streaming_only": false,
+            "limit_quality_to_device": false,
+            "device_max_sample_rate": null,
+            "normalization_enabled": false,
+            "normalization_target_lufs": -14.0,
+            "gapless_enabled": true,
+            "pw_force_bitperfect": false,
+            "sync_audio_on_startup": false,
+            "quality_fallback_behavior": "ask",
+            "skip_sink_switch": false,
+            "allow_quality_fallback": false
+        }"#;
+        let settings: AudioSettings =
+            serde_json::from_str(legacy).expect("legacy JSON should deserialize");
+        assert!(!settings.reserve_dac_while_running);
+    }
+
+    #[test]
+    fn round_trip_with_field_set() {
+        let mut settings = AudioSettings::default();
+        settings.reserve_dac_while_running = true;
+        let json = serde_json::to_string(&settings).expect("serialize");
+        let parsed: AudioSettings = serde_json::from_str(&json).expect("deserialize");
+        assert!(parsed.reserve_dac_while_running);
+    }
+
+    #[test]
+    fn default_is_false() {
+        let settings = AudioSettings::default();
+        assert!(!settings.reserve_dac_while_running);
+    }
 }

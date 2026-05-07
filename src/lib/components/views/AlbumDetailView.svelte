@@ -834,7 +834,7 @@
             disabled={!onLabelClick}
           >
             <div class="sidebar-entity-avatar label-avatar">
-              <Disc3 size={24} />
+              <Disc3 size={20} />
             </div>
             <div class="sidebar-entity-name">{album.label}</div>
           </button>
@@ -1482,8 +1482,8 @@
     min-width: 0;
   }
   .album-sidebar {
-    flex: 0 0 280px;
-    width: 280px;
+    flex: 0 0 224px;
+    width: 224px;
     display: flex;
     flex-direction: column;
     gap: 24px;
@@ -1492,10 +1492,10 @@
   .sidebar-section {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
   .sidebar-section-title {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1510,8 +1510,8 @@
   .sidebar-entity-card {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 8px 10px;
+    gap: 10px;
+    padding: 6px 8px;
     background: transparent;
     border: none;
     border-radius: 8px;
@@ -1529,9 +1529,9 @@
     cursor: default;
   }
   .sidebar-entity-avatar {
-    flex: 0 0 44px;
-    width: 44px;
-    height: 44px;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -1551,7 +1551,7 @@
     pointer-events: none;
   }
   .sidebar-entity-name {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--text-primary);
     overflow: hidden;

@@ -9,26 +9,31 @@ use std::fmt;
 
 #[derive(Debug)]
 pub struct DeviceReservation {
+    #[allow(dead_code)] // Read by `is_active()` once Task 2 introduces the `Active` variant.
     state: ReservationState,
 }
 
 #[derive(Debug)]
-#[allow(dead_code)] // `Active` is constructed in Task 2 once the zbus client lands.
 enum ReservationState {
-    Active {
-        // Filled in Task 2 with the zbus connection + bus name we own.
-        _placeholder: (),
-    },
+    /// No active D-Bus reservation; calls fall through as no-ops.
+    /// Task 2 reintroduces an `Active` variant carrying the zbus connection
+    /// and the bus name we own, at which point `is_active()` becomes useful.
     Degraded,
 }
 
 impl DeviceReservation {
-    /// Acquire a reservation for the given ALSA hw: device string.
+    /// Acquire a D-Bus device reservation for the given ALSA `hw:` device.
     ///
-    /// Returns `Ok(guard)` on success. On D-Bus unavailability or any other
-    /// non-fatal failure path, the implementation in Task 2 will return a
-    /// degraded guard so playback proceeds without reservation. For now the
-    /// device string is validated and a degraded guard is always returned.
+    /// Currently in Task 1: validates the device string and returns a
+    /// degraded (no-op) guard. The real D-Bus client lands in Task 2, at
+    /// which point this function will:
+    ///   - Return `Ok(active_guard)` if the bus name is acquired.
+    ///   - Return `Ok(degraded_guard)` if the session bus is unreachable.
+    ///   - Return `Err(InvalidDevice)` for unparseable device strings.
+    ///   - Return `Err(HigherPriorityHolder)` if another app refuses to release.
+    ///   - Return `Err(DbusError)` for protocol-level failures.
+    ///   - Return `Err(AlsaError)` for ALSA enumeration failures while
+    ///     resolving symbolic card names.
     pub fn acquire(hw_device: &str, _app_device_name: &str) -> Result<Self, ReservationError> {
         // Validate the device string. Real D-Bus acquisition lands in Task 2.
         let _card = parse_card_index(hw_device)?;
@@ -38,8 +43,11 @@ impl DeviceReservation {
     }
 
     /// Whether this guard currently holds an active D-Bus reservation.
+    ///
+    /// Always `false` in Task 1: there is no `Active` variant yet. Task 2
+    /// will reintroduce it once the zbus client wires real state in.
     pub fn is_active(&self) -> bool {
-        matches!(self.state, ReservationState::Active { .. })
+        false
     }
 }
 
@@ -57,6 +65,7 @@ pub enum ReservationError {
         holder_priority: i32,
     },
     DbusError(String),
+    AlsaError(String),
 }
 
 impl fmt::Display for ReservationError {
@@ -72,6 +81,7 @@ impl fmt::Display for ReservationError {
                 holder_name, holder_priority
             ),
             Self::DbusError(s) => write!(f, "D-Bus error: {}", s),
+            Self::AlsaError(s) => write!(f, "ALSA error: {}", s),
         }
     }
 }
@@ -109,7 +119,7 @@ pub(crate) fn parse_card_index(hw_device: &str) -> Result<u32, ReservationError>
 /// by iterating over `alsa::card::Iter`.
 fn resolve_card_index_by_name(name: &str) -> Result<u32, ReservationError> {
     for card in alsa::card::Iter::new() {
-        let card = card.map_err(|e| ReservationError::DbusError(e.to_string()))?;
+        let card = card.map_err(|e| ReservationError::AlsaError(e.to_string()))?;
         let id = card.get_name().unwrap_or_default();
         if id == name {
             return Ok(card.get_index() as u32);

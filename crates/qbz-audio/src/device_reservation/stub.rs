@@ -23,14 +23,45 @@ impl DeviceReservation {
     }
 }
 
+impl Drop for DeviceReservation {
+    /// Empty drop on non-Linux platforms; preserves RAII shape symmetry
+    /// with the Linux variant so callers can rely on the same lifetime model.
+    fn drop(&mut self) {}
+}
+
+/// Stub: variants exist for cross-platform pattern-matching parity with
+/// the Linux `ReservationError`, but are never constructed on this target
+/// (`acquire()` always returns a degraded `Ok`). The `#[allow(dead_code)]`
+/// is intentional and load-bearing for downstream `match` blocks (e.g.,
+/// the `DacReservationStatus` mapping introduced in Task 5) which must
+/// compile on every platform.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ReservationError {
-    Unsupported,
+    InvalidDevice(String),
+    HigherPriorityHolder {
+        holder_name: String,
+        holder_priority: i32,
+    },
+    DbusError(String),
+    AlsaError(String),
 }
 
 impl std::fmt::Display for ReservationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "device reservation is not supported on this platform")
+        match self {
+            Self::InvalidDevice(s) => write!(f, "invalid ALSA device string: {}", s),
+            Self::HigherPriorityHolder {
+                holder_name,
+                holder_priority,
+            } => write!(
+                f,
+                "device reserved by '{}' at priority {}",
+                holder_name, holder_priority
+            ),
+            Self::DbusError(s) => write!(f, "D-Bus error: {}", s),
+            Self::AlsaError(s) => write!(f, "ALSA error: {}", s),
+        }
     }
 }
 

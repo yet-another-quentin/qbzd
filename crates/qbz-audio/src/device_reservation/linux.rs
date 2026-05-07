@@ -10,16 +10,13 @@
 //! Acquisition algorithm (matches the spec at
 //! `qbz-nix-docs/specs/2026-05-07-alsa-exclusive-hardening-design.md`):
 //!
-//!   1. `RequestName` with `DO_NOT_QUEUE`.
-//!   2. `PrimaryOwner` / `AlreadyOwner`  -> we own it. Done.
-//!   3. `Exists` / `InQueue`             -> someone else holds it. Read their
-//!                                          `Priority` property; if our
-//!                                          priority is higher, call
-//!                                          `RequestRelease(our_priority)`
-//!                                          on the holder. If that returns
-//!                                          `true`, retry `RequestName` with
-//!                                          `DO_NOT_QUEUE | REPLACE_EXISTING`.
-//!   4. Anything else (zbus error, refusal, equal-or-lower priority) -> err.
+//! 1. `RequestName` with `DO_NOT_QUEUE`.
+//! 2. `PrimaryOwner` / `AlreadyOwner` -> we own it. Done.
+//! 3. `Exists` / `InQueue` -> someone else holds it. Read their `Priority`
+//!    property; if our priority is higher, call `RequestRelease(our_priority)`
+//!    on the holder. If that returns `true`, retry `RequestName` with
+//!    `DO_NOT_QUEUE | REPLACE_EXISTING`.
+//! 4. Anything else (zbus error, refusal, equal-or-lower priority) -> err.
 //!
 //! On `Drop`, an active guard releases the bus name. A *degraded* guard
 //! (returned when the session bus is unavailable) is a no-op on `Drop`.
@@ -40,9 +37,11 @@ use zbus::names::WellKnownName;
 /// recording session.
 pub(crate) const QBZ_PRIORITY: i32 = 5;
 
-/// Application name advertised over D-Bus when we publish the
-/// `ReserveDevice1` interface as a server. Currently captured in logs only;
-/// publishing the server side is deferred (see Task 2 spec note).
+/// Application name advertised over D-Bus when QBZ publishes the
+/// `ReserveDevice1` interface as a server. Deferred to a future commit — see
+/// `qbz-nix-docs/specs/2026-05-07-alsa-exclusive-hardening-design.md`,
+/// section "The org.freedesktop.ReserveDevice1 protocol", subsections
+/// "Note on `app_device_name`" / "Note on `ApplicationName`".
 #[allow(dead_code)]
 pub(crate) const QBZ_APPLICATION_NAME: &str = "QBZ";
 
@@ -74,16 +73,52 @@ impl DeviceReservation {
     /// Acquire a D-Bus device reservation for the given ALSA `hw:` device.
     ///
     /// Returns:
-    ///   - `Ok(active_guard)` once we own the bus name.
-    ///   - `Ok(degraded_guard)` if the session bus is unreachable. The caller
-    ///     should treat playback as "no reservation, but proceed normally".
-    ///   - `Err(InvalidDevice)` for unparseable device strings.
-    ///   - `Err(HigherPriorityHolder { .. })` if another app refuses to
-    ///     release, or holds at equal-or-greater priority.
-    ///   - `Err(DbusError(_))` for protocol-level zbus failures we can't
-    ///     downgrade (e.g. malformed bus name, reply marshaling failure).
-    ///   - `Err(AlsaError(_))` for ALSA enumeration failures while resolving
-    ///     symbolic card names like `hw:CARD=DacMagic`.
+    /// - `Ok(active_guard)` once we own the bus name.
+    /// - `Ok(degraded_guard)` if the session bus is unreachable. The caller
+    ///   should treat playback as "no reservation, but proceed normally".
+    /// - `Err(InvalidDevice)` for unparseable device strings.
+    /// - `Err(HigherPriorityHolder { .. })` if another app refuses to
+    ///   release, or holds at equal-or-greater priority.
+    /// - `Err(DbusError(_))` for protocol-level zbus failures we can't
+    ///   downgrade (e.g. malformed bus name, reply marshaling failure).
+    /// - `Err(AlsaError(_))` for ALSA enumeration failures while resolving
+    ///   symbolic card names like `hw:CARD=DacMagic`.
+    ///
+    /// # Tight coupling rule (load-bearing — do not violate)
+    ///
+    /// A `DeviceReservation` MUST always be created in tight coupling with an
+    /// immediate consumer of the underlying ALSA device:
+    ///
+    /// - Lifetime A: held inside [`AlsaDirectStream`] for as long as the PCM
+    ///   is open. Acquired before `PCM::new`, dropped after the PCM is closed.
+    /// - Lifetime B: held inside the application's `AppState` for as long as
+    ///   the QBZ process is running, gated by the `reserve_dac_while_running`
+    ///   setting. Acquired at startup or on toggle, dropped at process exit.
+    ///
+    /// **Never construct a `DeviceReservation` in isolation, hold it briefly,
+    /// and drop it without a real device consumer in between.** The pattern
+    ///
+    /// ```ignore
+    /// let r = DeviceReservation::acquire("hw:1,0", "test")?;
+    /// std::thread::sleep(Duration::from_secs(2));
+    /// drop(r);
+    /// ```
+    ///
+    /// triggers WirePlumber to release-and-reacquire the device over an idle
+    /// PCM, and some USB DACs (Cambridge DacMagic Plus confirmed, others
+    /// suspected) get stranded by that transition and require a hardware
+    /// power-cycle to recover. Validated 2026-05-07. Tests must always go
+    /// through `AlsaDirectStream::new()` (Lifetime A) or hold the reservation
+    /// for the entire process lifetime (Lifetime B).
+    ///
+    /// # Connection lifecycle
+    ///
+    /// `acquire` opens a fresh `zbus::blocking::Connection::session()` per
+    /// call. zbus 4.4 does not internally pool session-bus connections, so
+    /// each call pays a SASL handshake cost (~1-5 ms on a healthy bus). For
+    /// per-stream (Lifetime A) acquisition this is acceptable. For the
+    /// nested-inside-Lifetime-B pattern landing in Task 5, prefer reusing an
+    /// existing connection via the future `acquire_with_connection` overload.
     pub fn acquire(hw_device: &str, app_device_name: &str) -> Result<Self, ReservationError> {
         let card = parse_card_index(hw_device)?;
         let bus_name = bus_name_for_card(card);
@@ -120,6 +155,10 @@ impl DeviceReservation {
             }
             // Someone else holds it (or is queued). Check their priority and
             // ask them to step aside.
+            //
+            // DO_NOT_QUEUE makes InQueue unreachable in practice, but
+            // RequestNameReply is exhaustively matched and the contention
+            // logic handles it identically to Exists.
             RequestNameReply::Exists | RequestNameReply::InQueue => {
                 resolve_contention(&connection, &bus_name, &object_path, app_device_name)
             }
@@ -232,8 +271,8 @@ fn try_acquire_name(
 /// implements `Display`.
 fn release_name(conn: &Connection, bus_name: &str) -> zbus::fdo::Result<ReleaseNameReply> {
     let proxy = DBusProxy::new(conn)?;
-    // `zbus::fdo::Error` impls `From<zbus::Error>`, so `?` handles the names
-    // crate's TryFrom error via the zbus -> fdo conversion chain.
+    // .map_err(zbus::Error::from) bridges names crate -> zbus::Error;
+    // ? then bridges zbus::Error -> fdo::Error.
     let well_known: WellKnownName<'_> = bus_name.try_into().map_err(zbus::Error::from)?;
     proxy.release_name(well_known)
 }
@@ -247,15 +286,24 @@ fn resolve_contention(
     object_path: &str,
     app_device_name: &str,
 ) -> Result<DeviceReservation, ReservationError> {
+    // One Proxy serves all reads + the RequestRelease call against the
+    // current holder. zbus's Proxy is cheap to keep alive, but constructing
+    // it twice for back-to-back property reads has been observed to cost an
+    // extra GetAll round trip on some bus daemons; one proxy is both faster
+    // and clearer.
+    let holder_proxy = open_holder_proxy(conn, bus_name, object_path).map_err(|e| {
+        ReservationError::DbusError(format!("Proxy::new for holder failed: {}", e))
+    })?;
+
     // Default to 0 if the holder is uncooperative or doesn't expose Priority.
     // Rationale: PulseAudio/PipeWire are the most common holders and run at
     // priority 0; treating an unreadable priority as 0 lets us still pre-empt
     // them. Pro apps that *do* publish at higher priority will refuse via
     // RequestRelease anyway, which we honour below.
-    let holder_priority = read_holder_priority(conn, bus_name, object_path).unwrap_or(0);
+    let holder_priority = read_priority(&holder_proxy).unwrap_or(0);
 
     if QBZ_PRIORITY <= holder_priority {
-        let holder_name = read_holder_app_name(conn, bus_name, object_path)
+        let holder_name = read_application_name(&holder_proxy)
             .unwrap_or_else(|| "another application".to_string());
         log::info!(
             "[reservation] {} held by {} at priority {} (>= ours {}); refusing",
@@ -277,9 +325,9 @@ fn resolve_contention(
         QBZ_PRIORITY
     );
 
-    let released = request_release_from_holder(conn, bus_name, object_path, QBZ_PRIORITY)?;
+    let released = request_release(&holder_proxy, QBZ_PRIORITY)?;
     if !released {
-        let holder_name = read_holder_app_name(conn, bus_name, object_path)
+        let holder_name = read_application_name(&holder_proxy)
             .unwrap_or_else(|| "another application".to_string());
         log::info!(
             "[reservation] {} held by {} refused RequestRelease",
@@ -315,31 +363,35 @@ fn resolve_contention(
     }
 }
 
+/// Open a `Proxy` for the current holder's `ReserveDevice1` interface. Used
+/// for property reads (`Priority`, `ApplicationName`) and the `RequestRelease`
+/// call; the same proxy handle serves all three so we only pay one
+/// construction cost per contention case.
+fn open_holder_proxy<'a>(
+    conn: &'a Connection,
+    bus_name: &'a str,
+    object_path: &'a str,
+) -> zbus::Result<Proxy<'a>> {
+    Proxy::new(conn, bus_name, object_path, RESERVE_DEVICE1_INTERFACE)
+}
+
 /// Read the holder's `Priority` property via `org.freedesktop.DBus.Properties.Get`.
 /// Returns `None` if the holder is uncooperative (no such property, type
 /// mismatch, etc.); the caller treats that as priority 0.
-fn read_holder_priority(conn: &Connection, bus_name: &str, object_path: &str) -> Option<i32> {
-    let proxy = Proxy::new(conn, bus_name, object_path, RESERVE_DEVICE1_INTERFACE).ok()?;
+fn read_priority(proxy: &Proxy<'_>) -> Option<i32> {
     proxy.get_property::<i32>("Priority").ok()
 }
 
 /// Read the holder's `ApplicationName` property. Used purely for human-readable
 /// error messages in `HigherPriorityHolder`.
-fn read_holder_app_name(conn: &Connection, bus_name: &str, object_path: &str) -> Option<String> {
-    let proxy = Proxy::new(conn, bus_name, object_path, RESERVE_DEVICE1_INTERFACE).ok()?;
+fn read_application_name(proxy: &Proxy<'_>) -> Option<String> {
     proxy.get_property::<String>("ApplicationName").ok()
 }
 
-/// Call `RequestRelease(priority)` on the current holder. Returns the
-/// holder's reply (`true` = will release, `false` = refuses).
-fn request_release_from_holder(
-    conn: &Connection,
-    bus_name: &str,
-    object_path: &str,
-    priority: i32,
-) -> Result<bool, ReservationError> {
-    let proxy = Proxy::new(conn, bus_name, object_path, RESERVE_DEVICE1_INTERFACE)
-        .map_err(|e| ReservationError::DbusError(format!("Proxy::new for holder failed: {}", e)))?;
+/// Call `RequestRelease(priority)` on the current holder via the shared
+/// proxy. Returns the holder's reply (`true` = will release, `false` =
+/// refuses).
+fn request_release(proxy: &Proxy<'_>, priority: i32) -> Result<bool, ReservationError> {
     proxy
         .call::<_, _, bool>("RequestRelease", &(priority,))
         .map_err(|e| ReservationError::DbusError(format!("RequestRelease failed: {}", e)))

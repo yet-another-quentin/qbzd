@@ -1403,12 +1403,15 @@ impl Player {
                                 return;
                             };
 
-                            // Stop previous engine and wait for sink to release resources
+                            // Stop previous engine and wait for sink to release resources.
+                            // The 50ms sleep is an ALSA-only workaround for snd_pcm_open()
+                            // racing the previous PCM handle's release. On CoreAudio (macOS)
+                            // and WASAPI (Windows) the host stream stays open across track
+                            // changes, so the sleep just feeds 50ms of silence into the
+                            // mixer — audible as a click at each end of the gap.
                             if let Some(engine) = current_engine.take() {
                                 engine.stop();
-                                // Small delay to allow the audio sink to fully release its
-                                // reference to the mixer before creating a new player.
-                                // This prevents "resource busy" errors on rapid track switches.
+                                #[cfg(target_os = "linux")]
                                 std::thread::sleep(Duration::from_millis(50));
                             }
 
@@ -1760,9 +1763,12 @@ impl Player {
                                 return;
                             };
 
-                            // Stop previous engine
+                            // Stop previous engine. ALSA-only sleep — see Play handler
+                            // above for rationale (CoreAudio/WASAPI don't race here and the
+                            // 50ms gap is audible as a click).
                             if let Some(engine) = current_engine.take() {
                                 engine.stop();
+                                #[cfg(target_os = "linux")]
                                 std::thread::sleep(Duration::from_millis(50));
                             }
 
@@ -2092,9 +2098,16 @@ impl Player {
                                 .playback_start_millis
                                 .store(0, Ordering::SeqCst);
                             thread_state.position_at_start.store(0, Ordering::SeqCst);
-                            // Drop the stream to release the device and stop background CPU use.
-                            drop(stream_opt.take());
-                            *pause_suspend_deadline = None;
+                            // Defer dropping the stream so a Play immediately following Stop
+                            // (the frontend's track-change pattern is Stop → Play, not append)
+                            // can reuse the open device. Tearing CoreAudio down between every
+                            // track was producing the audible click on track change. The idle
+                            // loop's pause-suspend handler (below) drops the stream when this
+                            // deadline fires; Play / Resume / Seek / ReinitDevice all clear
+                            // the deadline so they reuse or replace the stream as needed.
+                            *pause_suspend_deadline = Some(
+                                Instant::now() + Duration::from_millis(PAUSE_SUSPEND_DELAY_MS),
+                            );
                             // Reset PipeWire clock if bit-perfect was active
                             #[cfg(target_os = "linux")]
                             if thread_settings

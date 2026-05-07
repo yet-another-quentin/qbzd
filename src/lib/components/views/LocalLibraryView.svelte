@@ -1842,10 +1842,18 @@
     if (metadataAlbumsLoaded || metadataAlbumsLoading) return;
     try {
       metadataAlbumsLoading = true;
-      metadataAlbums = await invoke<LocalAlbum[]>('v2_library_get_albums_metadata', {
-        includeHidden: false,
-        excludeNetworkFolders: shouldExcludeNetworkFolders(),
-      });
+      const includePlex = isPlexLibraryEnabled();
+      const [localResult, plexAlbumsRaw] = await Promise.all([
+        invoke<LocalAlbum[]>('v2_library_get_albums_metadata', {
+          includeHidden: false,
+          excludeNetworkFolders: shouldExcludeNetworkFolders(),
+        }),
+        includePlex
+          ? invoke<PlexCachedAlbum[]>('v2_plex_cache_get_albums').catch(() => [])
+          : Promise.resolve([]),
+      ]);
+      const plexAlbums = plexAlbumsRaw.map(mapPlexAlbum);
+      metadataAlbums = [...localResult, ...plexAlbums];
       metadataAlbumsLoaded = true;
     } catch (err) {
       console.error('[LocalLibrary] Failed to load metadata albums:', err);

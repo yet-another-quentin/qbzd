@@ -1697,7 +1697,7 @@
     font-size: 14px; font-weight: 500; color: var(--text-primary);
     margin-bottom: 4px; width: 100%; overflow: hidden;
     text-overflow: ellipsis; display: -webkit-box;
-    -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3;
+    -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3;
   }
 
   /* Label cards (round) */

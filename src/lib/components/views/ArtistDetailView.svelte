@@ -3878,6 +3878,7 @@
     /* Smart 2-line clamp */
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
@@ -3885,6 +3886,7 @@
   .bio-text.expanded {
     display: block;
     -webkit-line-clamp: unset;
+    line-clamp: unset;
     overflow: visible;
   }
 

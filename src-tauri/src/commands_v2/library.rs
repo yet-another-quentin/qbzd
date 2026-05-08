@@ -2661,6 +2661,25 @@ pub async fn v2_library_list_folder_tracks(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_list_folder_tracks_recursive(
+    folderPath: String,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<LocalTrack>, String> {
+    log::info!(
+        "Command: v2_library_list_folder_tracks_recursive {}",
+        folderPath
+    );
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.list_folder_tracks_recursive(&folderPath)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn v2_library_add_folder(
     path: String,
     state: State<'_, LibraryState>,

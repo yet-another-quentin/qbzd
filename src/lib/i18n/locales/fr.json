@@ -900,7 +900,8 @@
       "treeFolderTracks": "{count, plural, one {# titre} other {# titres}}",
       "treeLoading": "Chargement…",
       "treeEmpty": "Ce dossier est vide.",
-      "playAllRecursive": "Lire tous les titres de ce dossier"
+      "playAllRecursive": "Lire tous les titres de ce dossier",
+      "resizeHandle": "Redimensionner la barre latérale de l'arborescence des dossiers"
     },
     "folderListTitle": "Dossiers de la bibliothèque",
     "editTabs": {

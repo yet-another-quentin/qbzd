@@ -900,7 +900,8 @@
       "treeFolderTracks": "{count, plural, one {# faixa} other {# faixas}}",
       "treeLoading": "Carregando…",
       "treeEmpty": "Esta pasta está vazia.",
-      "playAllRecursive": "Reproduzir todas as faixas desta pasta"
+      "playAllRecursive": "Reproduzir todas as faixas desta pasta",
+      "resizeHandle": "Redimensionar barra lateral da árvore de pastas"
     },
     "folderListTitle": "Pastas da Biblioteca",
     "editTabs": {

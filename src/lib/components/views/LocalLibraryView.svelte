@@ -321,6 +321,15 @@
       // Hydrate Folders tab view-mode from the same payload. Defaults to
       // 'flat' when the field is absent (legacy installs).
       foldersViewMode = prefs.folders_view_mode === 'tree' ? 'tree' : 'flat';
+      // Hydrate the tree-mode sidebar width. NULL/missing → frontend
+      // default (432px). Anything non-positive is treated as missing so a
+      // corrupt/zeroed value can't collapse the rail at startup.
+      const persistedTreeWidth = prefs.folders_tree_sidebar_width;
+      if (typeof persistedTreeWidth === 'number' && persistedTreeWidth > 0) {
+        folderTreeSidebarWidth = persistedTreeWidth;
+      } else {
+        folderTreeSidebarWidth = FOLDER_TREE_SIDEBAR_DEFAULT_WIDTH;
+      }
       // On initial mount, always honour the user's configured tab order and
       // open whichever tab is first in their visible list — opening on
       // 'tracks' by default freezes startup on large libraries (16K+ tracks).
@@ -363,6 +372,97 @@
     } catch (err) {
       console.error('[LocalLibrary] Failed to persist folders_view_mode:', err);
       foldersViewMode = previous;
+    }
+  }
+
+  // ───────── Folders tab tree-mode sidebar resize handlers ─────────
+  // Drag interaction: capture starting cursor X + width on mousedown, then
+  // adjust width on each mousemove until mouseup. We disable text
+  // selection on <body> for the duration of the drag so the user doesn't
+  // accidentally select half the page while moving the mouse.
+  function clampTreeSidebarWidth(width: number): number {
+    const max = folderTreeSidebarMaxWidth;
+    const min = FOLDER_TREE_SIDEBAR_MIN_WIDTH;
+    if (width < min) return min;
+    if (width > max) return max;
+    return width;
+  }
+
+  function handleTreeSidebarMouseMove(event: MouseEvent) {
+    if (!isResizingTreeSidebar) return;
+    const delta = event.clientX - dragStartX;
+    folderTreeSidebarWidth = clampTreeSidebarWidth(dragStartWidth + delta);
+  }
+
+  async function handleTreeSidebarMouseUp() {
+    if (!isResizingTreeSidebar) return;
+    isResizingTreeSidebar = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    window.removeEventListener('mousemove', handleTreeSidebarMouseMove);
+    window.removeEventListener('mouseup', handleTreeSidebarMouseUp);
+    // Persist the user's chosen width. Best-effort — surface failures in
+    // the console but don't revert the UI; the local state is already the
+    // source of truth for the current session.
+    try {
+      await invoke('v2_set_library_folders_tree_sidebar_width', {
+        width: folderTreeSidebarWidth,
+      });
+    } catch (err) {
+      console.error(
+        '[LocalLibrary] Failed to persist folders_tree_sidebar_width:',
+        err,
+      );
+    }
+  }
+
+  function handleTreeSidebarMouseDown(event: MouseEvent) {
+    // Only react to the primary button; right-click / middle-click on the
+    // handle should be a no-op.
+    if (event.button !== 0) return;
+    event.preventDefault();
+    isResizingTreeSidebar = true;
+    dragStartX = event.clientX;
+    dragStartWidth = folderTreeSidebarWidth;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', handleTreeSidebarMouseMove);
+    window.addEventListener('mouseup', handleTreeSidebarMouseUp);
+  }
+
+  // Keyboard resize: arrow keys nudge the handle in 16px steps; Shift
+  // accelerates to 64px. Pressing Home/End jumps to the bounds. Persists
+  // on commit (key release) — same path as mouseup.
+  async function handleTreeSidebarKeyDown(event: KeyboardEvent) {
+    let next: number | null = null;
+    const step = event.shiftKey ? 64 : 16;
+    switch (event.key) {
+      case 'ArrowLeft':
+        next = folderTreeSidebarWidth - step;
+        break;
+      case 'ArrowRight':
+        next = folderTreeSidebarWidth + step;
+        break;
+      case 'Home':
+        next = FOLDER_TREE_SIDEBAR_MIN_WIDTH;
+        break;
+      case 'End':
+        next = folderTreeSidebarMaxWidth;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    folderTreeSidebarWidth = clampTreeSidebarWidth(next);
+    try {
+      await invoke('v2_set_library_folders_tree_sidebar_width', {
+        width: folderTreeSidebarWidth,
+      });
+    } catch (err) {
+      console.error(
+        '[LocalLibrary] Failed to persist folders_tree_sidebar_width:',
+        err,
+      );
     }
   }
 
@@ -753,6 +853,71 @@
   // populated under; flipping it invalidates the cache so the rail
   // doesn't display stale counts after the offline toggle changes.
   let lastTreeCountExcludeFilter = $state<boolean | null>(null);
+
+  // ───────── Folders tab tree-mode sidebar resize ─────────
+  // The left rail is user-resizable via a thin handle on its right edge.
+  // Default = 432px (1.8x the original 240px the spec called out as too
+  // narrow). Bounds: 200px floor; 40% of the live content area as ceiling.
+  // Persisted on drag-end via v2_set_library_folders_tree_sidebar_width.
+  const FOLDER_TREE_SIDEBAR_DEFAULT_WIDTH = 432;
+  const FOLDER_TREE_SIDEBAR_MIN_WIDTH = 200;
+  let folderTreeSidebarWidth = $state<number>(FOLDER_TREE_SIDEBAR_DEFAULT_WIDTH);
+  let isResizingTreeSidebar = $state(false);
+  let folderTreeContentAreaWidth = $state<number>(0);
+  let folderTreeLayoutEl = $state<HTMLDivElement | null>(null);
+  const folderTreeSidebarMaxWidth = $derived(
+    folderTreeContentAreaWidth > 0
+      ? Math.floor(folderTreeContentAreaWidth * 0.4)
+      : 800,
+  );
+
+  // Drag-state captured at mousedown so mousemove math doesn't rely on
+  // re-reading getBoundingClientRect every frame (cheap, but the captured
+  // offset also keeps the resize anchored to the column's left edge even
+  // if layout shifts mid-drag, e.g. global sidebar opening).
+  let dragStartX = 0;
+  let dragStartWidth = 0;
+
+  // Track the two-column layout's clientWidth via ResizeObserver. This
+  // covers both window resizes and global app-sidebar open/close, since
+  // both reflow the tree-mode container. Falls back to a window resize
+  // listener when ResizeObserver isn't available.
+  $effect(() => {
+    const el = folderTreeLayoutEl;
+    if (!el) return;
+    if (typeof ResizeObserver === 'undefined') {
+      const onResize = () => {
+        folderTreeContentAreaWidth = el.clientWidth;
+      };
+      onResize();
+      window.addEventListener('resize', onResize);
+      return () => {
+        window.removeEventListener('resize', onResize);
+      };
+    }
+    folderTreeContentAreaWidth = el.clientWidth;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        folderTreeContentAreaWidth = entry.contentRect.width;
+      }
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  });
+
+  // Re-clamp the user-chosen sidebar width when the live cap shrinks
+  // (e.g. window resized down). We only adjust on shrink — growing the
+  // window shouldn't widen the sidebar past what the user picked.
+  $effect(() => {
+    if (folderTreeSidebarWidth > folderTreeSidebarMaxWidth) {
+      folderTreeSidebarWidth = Math.max(
+        FOLDER_TREE_SIDEBAR_MIN_WIDTH,
+        folderTreeSidebarMaxWidth,
+      );
+    }
+  });
 
   const treeScanRoots = $derived.by<FolderEntry[]>(() => {
     return folders
@@ -4928,8 +5093,8 @@
                 <SquareCheckBig size={16} />
               </button>
             </div>
-            <div class="folders-tree-two-column-layout">
-              <div class="folder-tree-column">
+            <div class="folders-tree-two-column-layout" bind:this={folderTreeLayoutEl}>
+              <div class="folder-tree-column" style:width="{folderTreeSidebarWidth}px">
                 <div class="folder-tree-scroll">
                   {#if treeScanRoots.length === 0}
                     <div class="folders-tree-empty-state">
@@ -4957,6 +5122,23 @@
                     {/each}
                   {/if}
                 </div>
+                <!-- Drag handle anchored to the column's right edge.
+                     Mouse drag is the primary affordance; arrow keys
+                     (with Shift for big steps) and Home/End provide
+                     keyboard parity for accessibility. -->
+                <div
+                  class="tree-sidebar-resize-handle"
+                  class:resizing={isResizingTreeSidebar}
+                  role="separator"
+                  tabindex="0"
+                  aria-orientation="vertical"
+                  aria-label={$t('library.foldersTree.resizeHandle')}
+                  aria-valuenow={folderTreeSidebarWidth}
+                  aria-valuemin={FOLDER_TREE_SIDEBAR_MIN_WIDTH}
+                  aria-valuemax={folderTreeSidebarMaxWidth}
+                  onmousedown={handleTreeSidebarMouseDown}
+                  onkeydown={handleTreeSidebarKeyDown}
+                ></div>
               </div>
               <div class="folder-content-column">
                 {#if selectedAlbumForTree}
@@ -7735,7 +7917,10 @@
   }
 
   .folder-tree-column {
-    width: 240px;
+    /* Width is set inline via style:width — see folderTreeSidebarWidth in
+       LocalLibraryView.svelte. The 432px fallback only kicks in if the
+       inline style fails to attach (defensive). */
+    width: 432px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -7743,6 +7928,28 @@
     border-right: 1px solid var(--bg-tertiary);
     overflow: hidden;
     padding-left: 18px;
+    /* Anchor the absolutely-positioned resize handle on the right edge. */
+    position: relative;
+  }
+
+  .tree-sidebar-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 120ms ease;
+    z-index: 1;
+    /* Block selection bleed on the handle itself; the global override
+       on <body> during drag handles the rest of the page. */
+    user-select: none;
+  }
+
+  .tree-sidebar-resize-handle:hover,
+  .tree-sidebar-resize-handle.resizing {
+    background: var(--accent-color, var(--text-tertiary));
   }
 
   .folder-tree-scroll {

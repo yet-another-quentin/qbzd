@@ -900,7 +900,8 @@
       "treeFolderTracks": "{count, plural, one {# pista} other {# pistas}}",
       "treeLoading": "Cargando…",
       "treeEmpty": "Esta carpeta está vacía.",
-      "playAllRecursive": "Reproducir todas las pistas de esta carpeta"
+      "playAllRecursive": "Reproducir todas las pistas de esta carpeta",
+      "resizeHandle": "Redimensionar barra lateral del árbol de carpetas"
     },
     "folderListTitle": "Carpetas de la Biblioteca",
     "editTabs": {

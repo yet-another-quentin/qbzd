@@ -900,7 +900,8 @@
       "treeFolderTracks": "{count, plural, one {# Titel} other {# Titel}}",
       "treeLoading": "Lädt…",
       "treeEmpty": "Dieser Ordner ist leer.",
-      "playAllRecursive": "Alle Titel in diesem Ordner abspielen"
+      "playAllRecursive": "Alle Titel in diesem Ordner abspielen",
+      "resizeHandle": "Größe der Ordnerbaum-Seitenleiste ändern"
     },
     "folderListTitle": "Bibliotheksordner",
     "editTabs": {

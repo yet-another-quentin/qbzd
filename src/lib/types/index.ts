@@ -524,6 +524,13 @@ export type LibraryPreferences = {
    * `library_preferences.folders_view_mode` on the backend.
    */
   folders_view_mode?: 'flat' | 'tree';
+  /**
+   * User-chosen width (CSS pixels) of the tree-mode left sidebar in the
+   * Folders tab. `null`/`undefined` means "use the frontend default"
+   * (currently 432px). Persisted via
+   * `v2_set_library_folders_tree_sidebar_width` on drag end.
+   */
+  folders_tree_sidebar_width?: number | null;
 };
 
 // ============ Discover API Types ============

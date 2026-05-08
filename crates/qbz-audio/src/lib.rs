@@ -62,6 +62,7 @@ pub use backend::{
     AlsaDirectError, AlsaPlugin, AudioBackend, AudioBackendType, AudioDevice, BackendConfig,
     BackendManager, BackendResult, BitPerfectMode,
 };
+pub use coreaudio_direct::CoreAudioExclusiveGuard;
 pub use device_reservation::{DeviceReservation, ReservationError};
 pub use diagnostic::{AudioDiagnostic, BitDepthResult, DiagnosticSource};
 pub use dynamic_amplify::DynamicAmplify;

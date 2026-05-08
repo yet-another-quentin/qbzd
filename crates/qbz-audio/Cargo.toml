@@ -49,3 +49,4 @@ zbus = { version = "4", default-features = false, features = ["tokio"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 # CoreAudio for device probing, sample rate switching, and (future) hog mode / exclusive mode
 coreaudio-rs = "0.14.1"
+objc2-core-audio = "0.3.2"

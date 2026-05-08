@@ -54,6 +54,10 @@
     setPlaybackContext
   } from '$lib/stores/playbackContextStore';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
+  import LocalLibraryFolderTree from '$lib/components/LocalLibraryFolderTree.svelte';
+  import LocalLibraryFolderDetail from '$lib/components/LocalLibraryFolderDetail.svelte';
+  import type { FolderEntry } from '$lib/types/folderTree';
+  import { SvelteSet } from 'svelte/reactivity';
 
   // Backend types matching Rust models
   interface LocalTrack {
@@ -308,6 +312,9 @@
     try {
       const prefs = await invoke<LibraryPreferences>('v2_get_library_preferences');
       libraryPreferences = sanitizeLibraryPreferences(prefs);
+      // Hydrate Folders tab view-mode from the same payload. Defaults to
+      // 'flat' when the field is absent (legacy installs).
+      foldersViewMode = prefs.folders_view_mode === 'tree' ? 'tree' : 'flat';
       // If the active tab is no longer visible (e.g. user hid it on another
       // device), fall back to the first visible tab.
       const currentVisible = libraryPreferences.tab_order.filter(
@@ -320,6 +327,99 @@
     } catch (err) {
       console.warn('[LocalLibrary] Failed to load preferences, using defaults:', err);
     }
+  }
+
+  // Persist the Folders tab view-mode toggle to library_preferences.
+  // Optimistic local update — the backend command stores the value but
+  // doesn't echo back, so we trust the input and revert on error.
+  async function setFoldersViewMode(mode: 'flat' | 'tree') {
+    if (foldersViewMode === mode) return;
+    const previous = foldersViewMode;
+    foldersViewMode = mode;
+    if (mode === 'flat') {
+      // Leaving tree mode — reset the selection and the expanded set so
+      // the next entry into tree mode starts clean (matching first-load).
+      selectedFolderPath = null;
+      treeExpandedPaths = new SvelteSet<string>();
+    }
+    try {
+      await invoke('v2_set_library_folders_view_mode', { mode });
+    } catch (err) {
+      console.error('[LocalLibrary] Failed to persist folders_view_mode:', err);
+      foldersViewMode = previous;
+    }
+  }
+
+  // Tree-row chevron toggle. SvelteSet mutations are reactive, but we
+  // reassign explicitly so the $derived/effect trees pick up the change
+  // unambiguously even when tree-rows further down the recursion are
+  // sharing the same set reference.
+  function toggleFolderExpand(path: string) {
+    if (treeExpandedPaths.has(path)) {
+      treeExpandedPaths.delete(path);
+    } else {
+      treeExpandedPaths.add(path);
+    }
+  }
+
+  // Select a folder in the tree (left rail). Right pane routes via the
+  // selectedAlbumForTree derived — folders matching an album_group_key
+  // open the existing album-detail flow.
+  async function handleFolderTreeSelect(path: string) {
+    selectedFolderPath = path;
+    // If the path matches a known album, drive the existing
+    // album-detail flow so the rest of the view (back button,
+    // edit modal, queue context) keeps working unchanged.
+    const album = albumByGroupKey.get(path);
+    if (album) {
+      await handleAlbumClick(album);
+    }
+  }
+
+  // Recursive play: queue every track whose file_path lives under the
+  // given folder, then start playback at the first one. Backend has no
+  // dedicated recursive-tracks-under-path command yet, so v1 prefix-
+  // filters the existing v2_library_search exhaustive fetch (limit:0
+  // returns all tracks). Documented as a Task 7 trade-off; revisit if
+  // perf telemetry shows tree-mode play stalling on large libraries.
+  async function handlePlayRecursive(folderPath: string) {
+    if (!folderPath) return;
+    try {
+      const allTracks = await invoke<LocalTrack[]>('v2_library_search', {
+        query: '',
+        limit: 0,
+        excludeNetworkFolders: false,
+      });
+      const prefix = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+      const matching = allTracks.filter((trk) => trk.file_path.startsWith(prefix));
+      if (matching.length === 0) {
+        showToast($t('library.foldersTree.treeEmpty'), 'info');
+        return;
+      }
+      // Sort by file_path so playback follows on-disk ordering — closest
+      // analogue to "play this folder top-to-bottom" without per-folder
+      // disc/track-number handling (which we can't infer recursively
+      // across heterogeneous subfolders).
+      matching.sort((a, b) => a.file_path.localeCompare(b.file_path));
+      await setPlaybackContext(
+        'local_library',
+        folderPath,
+        folderPath.split('/').pop() || folderPath,
+        'local',
+        matching.map((trk) => trk.id),
+        0,
+      );
+      await setQueueForLocalTracks(matching, 0);
+      await handleTrackPlay(matching[0]);
+    } catch (err) {
+      console.error('[LocalLibrary] handlePlayRecursive failed:', err);
+    }
+  }
+
+  // Track click inside the FolderDetail right pane — single-track play
+  // using the existing handler (which also wires playback context).
+  async function handleFolderTreeTrackPlay(track: LocalTrack) {
+    await handleTrackPlay(track);
   }
 
   function handleLibraryPreferencesSaved(prefs: LibraryPreferences) {
@@ -611,6 +711,57 @@
   let stats = $state<LibraryStats | null>(null);
   let folders = $state<LibraryFolder[]>([]);
   let scanProgress = $state<ScanProgress | null>(null);
+
+  // ───────── Folders tab tree-mode state ─────────
+  // foldersViewMode toggles the Folders tab between the existing flat
+  // folder-grouped album list and the new two-column filesystem-hierarchy
+  // view. Persisted in `library_preferences.folders_view_mode`. Read on
+  // mount via `loadLibraryPreferences`.
+  let foldersViewMode = $state<'flat' | 'tree'>('flat');
+  // Path of the folder currently selected in the tree; drives the
+  // right-pane routing (album-detail vs FolderDetail vs empty-state).
+  let selectedFolderPath = $state<string | null>(null);
+  // Set of paths the user has expanded in the tree. Each top-level
+  // <LocalLibraryFolderTree> shares this set so siblings stay in sync.
+  let treeExpandedPaths = $state(new SvelteSet<string>());
+  // Top-level scan-root entries fed into the tree as the first depth.
+  // Lazily seeded once we read `folders` (the registered scan roots) —
+  // each scan root becomes a top-level <LocalLibraryFolderTree> node.
+  // We keep `track_count_under = 0` for the top-level row because we
+  // don't have a precomputed recursive-count per scan root yet; the
+  // child-level rows from `v2_library_list_folder_children` carry their
+  // own counts. Documented as Task 7 trade-off (option (b) in brief).
+  const treeScanRoots = $derived.by<FolderEntry[]>(() => {
+    return folders
+      .filter((sr) => sr.enabled !== false)
+      .map((sr) => {
+        const path = sr.path;
+        const lastSlash = path.lastIndexOf('/');
+        const fallback = lastSlash >= 0 && lastSlash < path.length - 1
+          ? path.slice(lastSlash + 1)
+          : path;
+        return {
+          kind: 'folder' as const,
+          path,
+          segment: sr.alias && sr.alias.length > 0 ? sr.alias : fallback || path,
+          track_count_under: 0,
+          artwork: null,
+        };
+      });
+  });
+  // O(1) lookup `path → LocalAlbum` so click handlers can decide whether
+  // to render the existing album-detail flow or the new FolderDetail.
+  // Albums in folder-grouped mode use `id === album_group_key === directory_path`.
+  const albumByGroupKey = $derived.by(() => {
+    const map = new Map<string, LocalAlbum>();
+    for (const album of albums) {
+      if (album.id) map.set(album.id, album);
+    }
+    return map;
+  });
+  const selectedAlbumForTree = $derived(
+    selectedFolderPath ? (albumByGroupKey.get(selectedFolderPath) ?? null) : null,
+  );
 
   // Multi-select (tracks tab) — mirrors FavoritesView pattern
   let trackSelectMode = $state(false);
@@ -4384,6 +4535,94 @@
       {:else if activeTab === 'folders'}
         {#key activeTab}
         <ViewTransition duration={200} distance={12} direction="up">
+        <!-- Folders view-mode toggle: Flat (legacy folder-grouped list) vs
+             Tree (filesystem hierarchy, two-column layout). The Hidden
+             Albums sub-view bypasses the toggle: when the user is browsing
+             hidden albums we render the flat list regardless of the
+             toggle's current value. -->
+        {#if !showHiddenAlbums}
+          <div class="folders-mode-segmented">
+            <button
+              type="button"
+              class="folders-mode-btn"
+              class:active={foldersViewMode === 'flat'}
+              aria-pressed={foldersViewMode === 'flat'}
+              onclick={() => setFoldersViewMode('flat')}
+            >
+              {$t('library.foldersTree.flatLabel')}
+            </button>
+            <button
+              type="button"
+              class="folders-mode-btn"
+              class:active={foldersViewMode === 'tree'}
+              aria-pressed={foldersViewMode === 'tree'}
+              onclick={() => setFoldersViewMode('tree')}
+            >
+              {$t('library.foldersTree.modeLabel')}
+            </button>
+          </div>
+        {/if}
+        {#if foldersViewMode === 'tree' && !showHiddenAlbums}
+          <!-- Tree mode: two-column shell mirroring the Artists tab CSS
+               byte-for-byte. Left rail renders registered scan roots as
+               top-level <LocalLibraryFolderTree> nodes; right pane routes
+               between the existing album-detail flow (when the selected
+               folder matches an album_group_key), the new FolderDetail
+               component (otherwise), or an empty-state hint. -->
+          <div class="folders-tree-container">
+            <div class="folders-tree-two-column-layout">
+              <div class="folder-tree-column">
+                <div class="folder-tree-scroll">
+                  {#if treeScanRoots.length === 0}
+                    <div class="folders-tree-empty-state">
+                      {$t('library.noFolders')}
+                    </div>
+                  {:else}
+                    {#each treeScanRoots as scanRoot (scanRoot.path)}
+                      <LocalLibraryFolderTree
+                        node={scanRoot}
+                        depth={0}
+                        selectedPath={selectedFolderPath}
+                        expandedPaths={treeExpandedPaths}
+                        onSelect={handleFolderTreeSelect}
+                        onToggleExpand={toggleFolderExpand}
+                        onPlayRecursive={handlePlayRecursive}
+                      />
+                    {/each}
+                  {/if}
+                </div>
+              </div>
+              <div class="folder-content-column">
+                {#if selectedAlbumForTree}
+                  <!-- Album-detail render is driven by the existing
+                       `selectedAlbum` state — handleFolderTreeSelect
+                       calls handleAlbumClick when the tree path maps to
+                       a known album, which sets selectedAlbum and
+                       triggers the top-level album-detail view at the
+                       parent ViewTransition (line ~3901). The right
+                       pane stays empty while the album-detail takes
+                       over the page; this branch exists so we don't
+                       fall through to FolderDetail for album folders. -->
+                  <div class="folders-tree-empty-state"></div>
+                {:else if selectedFolderPath}
+                  <LocalLibraryFolderDetail
+                    folderPath={selectedFolderPath}
+                    onSubfolderClick={(path) => {
+                      selectedFolderPath = path;
+                      treeExpandedPaths.add(path);
+                    }}
+                    onPlayTrack={handleFolderTreeTrackPlay}
+                    onPlayAllRecursive={handlePlayRecursive}
+                  />
+                {:else}
+                  <div class="folders-tree-empty-state">
+                    {$t('library.foldersTree.selectAFolder')}
+                  </div>
+                {/if}
+              </div>
+            </div>
+          </div>
+        {:else}
         {#if showHiddenAlbums}
           <!-- Hidden Albums View -->
           <div class="albums-section">
@@ -4477,6 +4716,7 @@
               </div>
             </div>
           {/if}
+        {/if}
         {/if}
         {/if}
         </ViewTransition>
@@ -7088,5 +7328,100 @@
   .empty-small p {
     margin: 0;
     font-size: 13px;
+  }
+
+  /* ─── Folders tab tree-mode (Task 7) ───
+     Mirrors the Artists tab two-column layout byte-for-byte. The shell
+     unmounts when foldersViewMode === 'flat', so the existing flat
+     folder-grouped list keeps full width. */
+  .folders-tree-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 320px);
+    min-height: 400px;
+  }
+
+  .folders-tree-two-column-layout {
+    display: flex;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    margin: 0 -24px 0 -18px;
+    padding: 0;
+  }
+
+  .folder-tree-column {
+    width: 240px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+    border-right: 1px solid var(--bg-tertiary);
+    overflow: hidden;
+    padding-left: 18px;
+  }
+
+  .folder-tree-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 12px 4px 0;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+    will-change: scroll-position;
+    contain: strict;
+  }
+
+  .folder-content-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0 24px 0 24px;
+  }
+
+  .folders-tree-empty-state {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 24px;
+    text-align: center;
+  }
+
+  /* Segmented control on the Folders toolbar — Flat / Tree. Visual style
+     matches the existing dropdown control buttons in the same toolbar
+     (`.control-btn`). Sits above the flat list / tree shell. */
+  .folders-mode-segmented {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .folders-mode-btn {
+    padding: 6px 14px;
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .folders-mode-btn.active {
+    background: var(--accent-primary);
+    color: var(--btn-primary-text, white);
+  }
+
+  .folders-mode-btn:hover:not(.active) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 </style>

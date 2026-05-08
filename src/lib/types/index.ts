@@ -516,6 +516,14 @@ export interface FavoritesPreferences {
 export type LibraryPreferences = {
   tab_order: string[];
   hidden_tabs: string[];
+  /**
+   * View mode for the LocalLibrary Folders tab. `flat` (default) keeps the
+   * existing folder-grouped album list; `tree` opens the two-column
+   * filesystem-hierarchy view. Persisted via
+   * `v2_set_library_folders_view_mode`. Read from
+   * `library_preferences.folders_view_mode` on the backend.
+   */
+  folders_view_mode?: 'flat' | 'tree';
 };
 
 // ============ Discover API Types ============

@@ -51,6 +51,15 @@
     isTrackPathSelected?: (trackPath: string) => boolean;
     onToggleFolderSelection?: (folderPath: string, currentState: 'none' | 'partial' | 'all') => void;
     onToggleTrackSelection?: (trackPath: string) => void;
+    /**
+     * When true, the lazy `v2_library_list_folder_children` invoke
+     * forwards `excludeNetworkFolders: true` so descendants living on
+     * a network mount are filtered out of the rail. Mirrors the
+     * predicate used by flat-mode search and recursive playback so
+     * tree visibility, flat list, and queueing all share one source
+     * of truth. Caller computes via `shouldExcludeNetworkFolders()`.
+     */
+    excludeNetworkFolders?: boolean;
   }
 
   let {
@@ -69,6 +78,7 @@
     isTrackPathSelected,
     onToggleFolderSelection,
     onToggleTrackSelection,
+    excludeNetworkFolders = false,
   }: Props = $props();
 
   const isFolder = $derived(node.kind === 'folder');
@@ -90,7 +100,10 @@
       loading = true;
       loadError = null;
       const folderPath = node.path;
-      invoke<FolderTreeEntry[]>('v2_library_list_folder_children', { parentPath: folderPath })
+      invoke<FolderTreeEntry[]>('v2_library_list_folder_children', {
+        parentPath: folderPath,
+        excludeNetworkFolders,
+      })
         .then((result) => {
           children = result;
         })
@@ -329,6 +342,7 @@
             {isTrackPathSelected}
             {onToggleFolderSelection}
             {onToggleTrackSelection}
+            {excludeNetworkFolders}
           />
         {/if}
       {/each}

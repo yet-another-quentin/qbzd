@@ -1710,7 +1710,7 @@
     try {
       const fetched = await invoke<LocalTrack[]>(
         'v2_library_list_folder_tracks_recursive',
-        { folderPath },
+        { folderPath, excludeNetworkFolders: shouldExcludeNetworkFolders() },
       );
       const next = new Set(selectedTrackIds);
       // 'all' means user wants to deselect every descendant. 'none' and
@@ -1761,7 +1761,7 @@
       try {
         const fetched = await invoke<LocalTrack[]>(
           'v2_library_list_folder_tracks_recursive',
-          { folderPath: parent },
+          { folderPath: parent, excludeNetworkFolders: shouldExcludeNetworkFolders() },
         );
         for (const trk of fetched) {
           trackPathById.set(trk.id, trk.file_path);
@@ -4897,6 +4897,7 @@
                         {isTrackPathSelected}
                         onToggleFolderSelection={toggleTreeFolderSelection}
                         onToggleTrackSelection={toggleTreeTrackSelection}
+                        excludeNetworkFolders={shouldExcludeNetworkFolders()}
                       />
                     {/each}
                   {/if}
@@ -4923,6 +4924,7 @@
                     }}
                     onPlayTrack={handleFolderTreeTrackPlay}
                     onPlayAllRecursive={handlePlayRecursive}
+                    excludeNetworkFolders={shouldExcludeNetworkFolders()}
                   />
                 {:else}
                   <div class="folders-tree-empty-state">

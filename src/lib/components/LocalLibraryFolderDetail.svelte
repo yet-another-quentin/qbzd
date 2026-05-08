@@ -41,9 +41,22 @@
     onSubfolderClick: (path: string) => void;
     onPlayTrack: (track: LocalTrack) => void;
     onPlayAllRecursive: (folderPath: string) => void;
+    /**
+     * Forward the same exclude-network-folders flag flat-mode search
+     * uses, so the right-pane subfolder + direct-tracks listings stay
+     * consistent with the tree rail and the recursive-play boundary.
+     * Caller computes via `shouldExcludeNetworkFolders()`.
+     */
+    excludeNetworkFolders?: boolean;
   }
 
-  let { folderPath, onSubfolderClick, onPlayTrack, onPlayAllRecursive }: Props = $props();
+  let {
+    folderPath,
+    onSubfolderClick,
+    onPlayTrack,
+    onPlayAllRecursive,
+    excludeNetworkFolders = false,
+  }: Props = $props();
 
   let subfolders = $state<FolderEntry[]>([]);
   let directTracks = $state<LocalTrack[]>([]);
@@ -75,8 +88,14 @@
     loading = true;
     loadError = null;
     Promise.all([
-      invoke<FolderTreeEntry[]>('v2_library_list_folder_children', { parentPath: path }),
-      invoke<LocalTrack[]>('v2_library_list_folder_tracks', { folderPath: path }),
+      invoke<FolderTreeEntry[]>('v2_library_list_folder_children', {
+        parentPath: path,
+        excludeNetworkFolders,
+      }),
+      invoke<LocalTrack[]>('v2_library_list_folder_tracks', {
+        folderPath: path,
+        excludeNetworkFolders,
+      }),
     ])
       .then(([children, tracks]) => {
         if (path !== folderPath) return;

@@ -1586,6 +1586,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_save_favorites_preferences,
             commands_v2::v2_get_library_preferences,
             commands_v2::v2_save_library_preferences,
+            commands_v2::v2_set_library_folders_view_mode,
             commands_v2::v2_get_cache_stats,
             commands_v2::v2_get_available_backends,
             commands_v2::v2_get_devices_for_backend,

@@ -388,7 +388,7 @@
       const allTracks = await invoke<LocalTrack[]>('v2_library_search', {
         query: '',
         limit: 0,
-        excludeNetworkFolders: false,
+        excludeNetworkFolders: shouldExcludeNetworkFolders(),
       });
       const prefix = folderPath.endsWith('/') ? folderPath : folderPath + '/';
       const matching = allTracks.filter((trk) => trk.file_path.startsWith(prefix));
@@ -413,6 +413,7 @@
       await handleTrackPlay(matching[0]);
     } catch (err) {
       console.error('[LocalLibrary] handlePlayRecursive failed:', err);
+      showToast($t('toast.failedPlayTrack'), 'error');
     }
   }
 

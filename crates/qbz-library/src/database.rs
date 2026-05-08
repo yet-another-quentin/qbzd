@@ -3,7 +3,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
-use crate::{AudioFormat, LibraryError, LocalAlbum, LocalArtist, LocalTrack};
+use crate::{AudioFormat, FolderTreeEntry, LibraryError, LocalAlbum, LocalArtist, LocalTrack};
 
 #[derive(Debug, Clone)]
 pub struct AlbumTrackUpdate {
@@ -1429,6 +1429,180 @@ impl LibraryDatabase {
         Ok(tracks)
     }
 
+    /// List the immediate children of a folder in the local-library
+    /// filesystem hierarchy.
+    ///
+    /// Walks `local_tracks.file_path` and computes one row per direct
+    /// child. Returns folders first (alphabetical, case-insensitive),
+    /// then tracks (alphabetical, case-insensitive).
+    ///
+    /// Filters `COALESCE(source, 'user') = 'user'` so Qobuz offline
+    /// downloads are excluded; Plex rows already live outside
+    /// `local_tracks`.
+    ///
+    /// `parent_path` is the absolute path of the folder whose children
+    /// to enumerate. The `_` and `%` characters are escaped before
+    /// binding to defend against pattern-injection on paths that
+    /// contain SQL LIKE metacharacters.
+    pub fn list_folder_children(
+        &self,
+        parent_path: &str,
+    ) -> Result<Vec<FolderTreeEntry>, LibraryError> {
+        let escaped_prefix = escape_like_pattern(parent_path);
+
+        // SQL strategy (CTE form for readability; SQLite uses
+        // idx_tracks_file_path on the LIKE prefix in the candidates step):
+        //   suffix        = file_path with the parent prefix + '/' stripped
+        //   child_segment = leading path component of suffix
+        //   kind          = 'folder' if suffix contains a '/', else 'track'
+        // Group by (child_segment, kind) so folders aggregate over all
+        // descendant tracks; track rows are 1:1 with their file. Include
+        // MIN(file_path) so we can recover the absolute path for tracks
+        // (folders ignore it and reconstruct path from parent + segment).
+        let sql = "WITH candidates AS ( \
+                SELECT \
+                    substr(file_path, length(?1) + 2) AS suffix, \
+                    file_path, \
+                    artwork_path \
+                FROM local_tracks \
+                WHERE file_path LIKE ?2 || '/%' ESCAPE '\\' \
+                  AND COALESCE(source, 'user') = 'user' \
+             ), \
+             classified AS ( \
+                SELECT \
+                    CASE WHEN instr(suffix, '/') > 0 \
+                         THEN substr(suffix, 1, instr(suffix, '/') - 1) \
+                         ELSE suffix \
+                    END AS child_segment, \
+                    CASE WHEN instr(suffix, '/') > 0 \
+                         THEN 'folder' ELSE 'track' \
+                    END AS kind, \
+                    file_path, \
+                    artwork_path \
+                FROM candidates \
+             ) \
+             SELECT \
+                child_segment, \
+                kind, \
+                COUNT(*) AS track_count_under, \
+                MAX(artwork_path) AS artwork, \
+                MIN(file_path) AS one_file_path \
+             FROM classified \
+             GROUP BY child_segment, kind";
+
+        let mut stmt = self
+            .conn
+            .prepare(sql)
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        // ?1 bound with the unescaped path (used in length() arithmetic
+        // on the row's stored file_path; that storage is unescaped).
+        // ?2 bound with the LIKE-escaped pattern prefix.
+        let rows = stmt
+            .query_map(params![parent_path, escaped_prefix], |row| {
+                let segment: String = row.get(0)?;
+                let kind: String = row.get(1)?;
+                let count: u32 = row.get(2)?;
+                let artwork: Option<String> = row.get(3)?;
+                let one_file_path: Option<String> = row.get(4)?;
+                Ok((segment, kind, count, artwork, one_file_path))
+            })
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let mut entries: Vec<FolderTreeEntry> = Vec::new();
+        for row in rows {
+            let (segment, kind, count, artwork, one_file_path) =
+                row.map_err(|e| LibraryError::Database(e.to_string()))?;
+            match kind.as_str() {
+                "folder" => {
+                    let path = format!("{}/{}", parent_path, segment);
+                    entries.push(FolderTreeEntry::Folder {
+                        path,
+                        segment,
+                        track_count_under: count,
+                        artwork,
+                    });
+                }
+                "track" => {
+                    // Use the actual file_path so paths with edge-case
+                    // characters round-trip exactly as stored.
+                    let path = one_file_path
+                        .unwrap_or_else(|| format!("{}/{}", parent_path, segment));
+                    entries.push(FolderTreeEntry::Track { path, segment });
+                }
+                _ => {
+                    // Unknown kind — skip defensively.
+                }
+            }
+        }
+
+        // Sort: folders first, then tracks; alphabetical (case-insensitive)
+        // within each group. Done in Rust because SQLite's ORDER BY on a
+        // boolean expression like `(kind = 'track')` is fragile across
+        // versions and we already have all rows in memory.
+        entries.sort_by(|a, b| {
+            let kind_rank = |e: &FolderTreeEntry| match e {
+                FolderTreeEntry::Folder { .. } => 0,
+                FolderTreeEntry::Track { .. } => 1,
+            };
+            let segment = |e: &FolderTreeEntry| match e {
+                FolderTreeEntry::Folder { segment, .. } => segment.clone(),
+                FolderTreeEntry::Track { segment, .. } => segment.clone(),
+            };
+            kind_rank(a)
+                .cmp(&kind_rank(b))
+                .then_with(|| segment(a).to_lowercase().cmp(&segment(b).to_lowercase()))
+        });
+
+        Ok(entries)
+    }
+
+    /// List the direct-child tracks of a folder (NON-recursive).
+    ///
+    /// Returns rows from `local_tracks` whose `file_path` is exactly
+    /// `folder_path + "/" + filename` — files in subfolders are
+    /// excluded. Mirrors the source filter from
+    /// [`Self::list_folder_children`] so Qobuz downloads do not appear.
+    /// Ordering matches the canonical album-track ordering used by
+    /// [`Self::get_album_tracks`]: disc, then track number, then title.
+    pub fn list_folder_tracks(
+        &self,
+        folder_path: &str,
+    ) -> Result<Vec<LocalTrack>, LibraryError> {
+        let escaped_prefix = escape_like_pattern(folder_path);
+
+        let sql = format!(
+            "SELECT {cols} FROM local_tracks \
+             WHERE file_path LIKE ?1 || '/%' ESCAPE '\\' \
+               AND substr(file_path, length(?2) + 2) NOT LIKE '%/%' ESCAPE '\\' \
+               AND COALESCE(source, 'user') = 'user' \
+             ORDER BY disc_number ASC NULLS LAST, \
+                      track_number ASC NULLS LAST, \
+                      title COLLATE NOCASE ASC",
+            cols = Self::TRACK_COLUMNS,
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        // ?1 = LIKE-escaped pattern (matches paths under the folder).
+        // ?2 = unescaped path used for substr arithmetic on stored
+        //      file_path (which is itself unescaped).
+        let rows = stmt
+            .query_map(params![escaped_prefix, folder_path], |row| {
+                Self::row_to_track(row)
+            })
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let mut tracks = Vec::new();
+        for track in rows {
+            tracks.push(track.map_err(|e| LibraryError::Database(e.to_string()))?);
+        }
+        Ok(tracks)
+    }
+
     /// Get all albums grouped by metadata (album + album_artist OR
     /// artist), with fallback to folder grouping for tracks with no
     /// usable album tag, and a single 'Unknown Album' bucket for total
@@ -2079,6 +2253,20 @@ impl LibraryDatabase {
             _ => AudioFormat::Unknown,
         }
     }
+}
+
+/// Escape `%`, `_` and `\` characters so the input can be embedded as a
+/// LIKE pattern fragment. Pair with `LIKE ?n || '/%' ESCAPE '\'` at the
+/// SQL site. Used by [`LibraryDatabase::list_folder_children`] and
+/// [`LibraryDatabase::list_folder_tracks`] to defend against
+/// pattern-injection on filesystem paths that legitimately contain
+/// metacharacters (a track named `100%.flac`, a folder containing
+/// `_intro_`, etc.).
+fn escape_like_pattern(input: &str) -> String {
+    input
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
 }
 
 /// Library statistics
@@ -4594,5 +4782,255 @@ mod metadata_grouping_tests {
         let key = "Album X|Artist Y";
         let tracks = db.get_album_tracks_metadata(key).unwrap();
         assert_eq!(tracks.len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod folder_tree_tests {
+    //! Tests for `list_folder_children` / `list_folder_tracks`.
+    //!
+    //! Fixture layout (paths only — metadata is enough to round-trip
+    //! through `LocalTrack`):
+    //!
+    //! ```text
+    //! /m/A/album1/t1.flac           (user)
+    //! /m/A/album1/t2.flac           (user)
+    //! /m/A/album1/Disc 1/t3.flac    (user, in subfolder)
+    //! /m/A/album2/t4.flac           (user)
+    //! /m/B/album3/t5.flac           (user)
+    //! /m/A/album1/qcache.flac       (qobuz_download — must be filtered)
+    //! /m/percent_test/100%.flac     (user, special chars)
+    //! ```
+    use super::*;
+    use tempfile::TempDir;
+    fn fresh_db() -> (TempDir, LibraryDatabase) {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("library.db");
+        let db = LibraryDatabase::open(&path).unwrap();
+        (tmp, db)
+    }
+
+    fn insert_at(
+        db: &LibraryDatabase,
+        file_path: &str,
+        disc: Option<u32>,
+        track_no: Option<u32>,
+        title: &str,
+    ) {
+        // NB: `LibraryDatabase::insert_track` stamps `source` itself
+        // (always 'user' unless the path matches a downloaded_purchases
+        // row), so we never set track.source here. To insert with a
+        // different source value (e.g. 'qobuz_download'), use
+        // `insert_qobuz_download_at` below.
+        let mut t = LocalTrack::default();
+        t.file_path = file_path.to_string();
+        t.title = title.to_string();
+        t.album = "Test Album".to_string();
+        t.album_artist = Some("Test Artist".to_string());
+        t.artist = "Test Artist".to_string();
+        t.album_group_key = file_path
+            .rsplit_once('/')
+            .map(|(parent, _)| parent.to_string())
+            .unwrap_or_default();
+        t.album_group_title = "Test Album".to_string();
+        t.disc_number = disc;
+        t.track_number = track_no;
+        db.insert_track(&t).unwrap();
+    }
+
+    /// Insert a row directly with `source = 'qobuz_download'`.
+    /// `insert_track` overrides the source field so we go through raw
+    /// SQL to model the offline-cache code path that DOES write that
+    /// value.
+    fn insert_qobuz_download_at(db: &LibraryDatabase, file_path: &str, title: &str) {
+        db.with_connection(|conn| {
+            conn.execute(
+                "INSERT INTO local_tracks \
+                 (file_path, title, artist, album, album_artist, \
+                  track_number, disc_number, year, genre, catalog_number, \
+                  duration_secs, format, bit_depth, sample_rate, channels, \
+                  file_size_bytes, cue_file_path, cue_start_secs, cue_end_secs, \
+                  artwork_path, last_modified, indexed_at, album_group_key, \
+                  album_group_title, source, is_network_mount) \
+                 VALUES (?1, ?2, 'X', 'X', 'X', \
+                         1, 1, NULL, NULL, NULL, \
+                         0, 'FLAC', NULL, 44100.0, 2, \
+                         0, NULL, NULL, NULL, \
+                         NULL, 0, 0, 'qcache', \
+                         'qcache', 'qobuz_download', 0)",
+                rusqlite::params![file_path, title],
+            )
+            .unwrap();
+        });
+    }
+
+    fn seed_standard_fixture(db: &LibraryDatabase) {
+        // Standard layout — 5 user tracks under /m/A and /m/B.
+        insert_at(db, "/m/A/album1/t1.flac", Some(1), Some(1), "Alpha");
+        insert_at(db, "/m/A/album1/t2.flac", Some(1), Some(2), "Beta");
+        insert_at(db, "/m/A/album1/Disc 1/t3.flac", Some(1), Some(1), "Gamma");
+        insert_at(db, "/m/A/album2/t4.flac", Some(1), Some(1), "Delta");
+        insert_at(db, "/m/B/album3/t5.flac", Some(1), Some(1), "Epsilon");
+
+        // One Qobuz download in the same album — must be filtered out
+        // by both list_folder_children and list_folder_tracks.
+        insert_qobuz_download_at(db, "/m/A/album1/qcache.flac", "QobuzCache");
+    }
+
+    #[test]
+    fn list_folder_children_returns_folders_before_tracks() {
+        let (_tmp, db) = fresh_db();
+        seed_standard_fixture(&db);
+
+        // /m/A/album1 has: subfolder "Disc 1", tracks "t1.flac" + "t2.flac".
+        // Expected order: folder first, then tracks alphabetical.
+        let children = db.list_folder_children("/m/A/album1").unwrap();
+        assert_eq!(children.len(), 3, "one folder + two tracks expected");
+
+        match &children[0] {
+            FolderTreeEntry::Folder {
+                segment,
+                track_count_under,
+                path,
+                ..
+            } => {
+                assert_eq!(segment, "Disc 1");
+                assert_eq!(*track_count_under, 1);
+                assert_eq!(path, "/m/A/album1/Disc 1");
+            }
+            other => panic!("expected folder first, got {:?}", other),
+        }
+        match &children[1] {
+            FolderTreeEntry::Track { segment, path } => {
+                assert_eq!(segment, "t1.flac");
+                assert_eq!(path, "/m/A/album1/t1.flac");
+            }
+            other => panic!("expected track at index 1, got {:?}", other),
+        }
+        match &children[2] {
+            FolderTreeEntry::Track { segment, .. } => {
+                assert_eq!(segment, "t2.flac");
+            }
+            other => panic!("expected track at index 2, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn list_folder_children_filters_qobuz_downloads() {
+        let (_tmp, db) = fresh_db();
+        seed_standard_fixture(&db);
+
+        let children = db.list_folder_children("/m/A/album1").unwrap();
+        // qcache.flac (qobuz_download) must not appear, even though it
+        // shares the same parent folder as t1.flac/t2.flac.
+        for entry in &children {
+            if let FolderTreeEntry::Track { segment, .. } = entry {
+                assert_ne!(
+                    segment, "qcache.flac",
+                    "qobuz_download row leaked into tree"
+                );
+            }
+        }
+
+        // Track count under "Disc 1" should also exclude any qobuz rows
+        // (none here, but the filter must hold even at folder level).
+        let folder_count = children
+            .iter()
+            .filter_map(|e| match e {
+                FolderTreeEntry::Folder {
+                    track_count_under, ..
+                } => Some(*track_count_under),
+                _ => None,
+            })
+            .sum::<u32>();
+        assert_eq!(folder_count, 1, "Disc 1 contains exactly 1 user track");
+    }
+
+    #[test]
+    fn list_folder_children_handles_special_chars_in_path() {
+        let (_tmp, db) = fresh_db();
+        seed_standard_fixture(&db);
+
+        // Folder containing a literal '%' in the filename. Without
+        // escape_like_pattern, the '%' would behave as a wildcard and
+        // either over-match or fail to match.
+        insert_at(&db, "/m/percent_test/100%.flac", Some(1), Some(1), "Hundred");
+        // A second literal-percent path that should NOT show up under
+        // /m/percent_test (different parent).
+        insert_at(
+            &db,
+            "/m/percent_other/200%.flac",
+            Some(1),
+            Some(1),
+            "Two Hundred",
+        );
+
+        let children = db.list_folder_children("/m/percent_test").unwrap();
+        assert_eq!(children.len(), 1, "only the local 100% file matches");
+        match &children[0] {
+            FolderTreeEntry::Track { segment, path } => {
+                assert_eq!(segment, "100%.flac");
+                assert_eq!(path, "/m/percent_test/100%.flac");
+            }
+            other => panic!("expected single track, got {:?}", other),
+        }
+
+        // And vice-versa — also test underscore handling in the parent.
+        // /m/percent_test contains an '_' char that LIKE would match
+        // any single character. If escape_like_pattern is missing, a
+        // sibling like /m/percentXtest/foo.flac would also match.
+        insert_at(&db, "/m/percentXtest/decoy.flac", Some(1), Some(1), "Decoy");
+        let children = db.list_folder_children("/m/percent_test").unwrap();
+        assert_eq!(
+            children.len(),
+            1,
+            "underscore in parent path must be escaped"
+        );
+    }
+
+    #[test]
+    fn list_folder_tracks_excludes_subfolder_contents() {
+        let (_tmp, db) = fresh_db();
+        seed_standard_fixture(&db);
+
+        // /m/A/album1 has direct tracks t1.flac + t2.flac, plus one
+        // track in a subfolder (Disc 1/t3.flac). The latter must NOT
+        // appear in list_folder_tracks output.
+        let tracks = db.list_folder_tracks("/m/A/album1").unwrap();
+        assert_eq!(tracks.len(), 2, "subfolder tracks must be excluded");
+        let titles: Vec<_> = tracks.iter().map(|t| t.title.as_str()).collect();
+        assert!(titles.contains(&"Alpha"));
+        assert!(titles.contains(&"Beta"));
+        assert!(
+            !titles.contains(&"Gamma"),
+            "Disc 1/t3.flac leaked into direct-children list"
+        );
+
+        // Qobuz download must also be excluded from direct tracks.
+        assert!(
+            !titles.contains(&"QobuzCache"),
+            "qobuz_download row leaked into direct-children list"
+        );
+    }
+
+    #[test]
+    fn list_folder_tracks_orders_by_disc_track_title() {
+        let (_tmp, db) = fresh_db();
+        // Build a small fixture deliberately out of natural sort order.
+        // Expected sort: disc ASC, track ASC, title ASC (NOCASE).
+        insert_at(&db, "/m/order/disc2-track1.flac", Some(2), Some(1), "D2T1");
+        insert_at(&db, "/m/order/disc1-track2.flac", Some(1), Some(2), "D1T2");
+        insert_at(&db, "/m/order/disc1-track1-bee.flac", Some(1), Some(1), "Bee");
+        insert_at(
+            &db,
+            "/m/order/disc1-track1-ant.flac",
+            Some(1),
+            Some(1),
+            "ant", // lowercase — NOCASE collation should sort ant < Bee
+        );
+
+        let tracks = db.list_folder_tracks("/m/order").unwrap();
+        let titles: Vec<_> = tracks.iter().map(|t| t.title.clone()).collect();
+        assert_eq!(titles, vec!["ant", "Bee", "D1T2", "D2T1"]);
     }
 }

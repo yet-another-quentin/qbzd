@@ -1537,9 +1537,9 @@ impl LibraryDatabase {
         }
 
         // Sort: folders first, then tracks; alphabetical (case-insensitive)
-        // within each group. Done in Rust because SQLite's ORDER BY on a
-        // boolean expression like `(kind = 'track')` is fragile across
-        // versions and we already have all rows in memory.
+        // within each group. Done in Rust because we already have all rows
+        // in memory after the GROUP BY, and Rust's case-insensitive compare
+        // is more obvious than COLLATE NOCASE on a CASE-derived column.
         entries.sort_by(|a, b| {
             let kind_rank = |e: &FolderTreeEntry| match e {
                 FolderTreeEntry::Folder { .. } => 0,
@@ -1574,7 +1574,7 @@ impl LibraryDatabase {
         let sql = format!(
             "SELECT {cols} FROM local_tracks \
              WHERE file_path LIKE ?1 || '/%' ESCAPE '\\' \
-               AND substr(file_path, length(?2) + 2) NOT LIKE '%/%' ESCAPE '\\' \
+               AND substr(file_path, length(?2) + 2) NOT LIKE '%/%' \
                AND COALESCE(source, 'user') = 'user' \
              ORDER BY disc_number ASC NULLS LAST, \
                       track_number ASC NULLS LAST, \

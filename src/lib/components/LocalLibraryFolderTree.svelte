@@ -3,24 +3,11 @@
   import { t } from '$lib/i18n';
   import { ChevronRight, ChevronDown, Folder, FileMusic, Play } from 'lucide-svelte';
   import type { SvelteSet } from 'svelte/reactivity';
+  import type { FolderTreeEntry } from '$lib/types/folderTree';
   // Svelte 5 deprecates `<svelte:self>` in favor of self-imports
   // (https://svelte.dev/e/svelte_self_deprecated). Self-import is the
   // recommended replacement; behavior is equivalent.
   import Self from './LocalLibraryFolderTree.svelte';
-
-  type FolderEntry = {
-    kind: 'folder';
-    path: string;
-    segment: string;
-    track_count_under: number;
-    artwork: string | null;
-  };
-  type TrackEntry = {
-    kind: 'track';
-    path: string;
-    segment: string;
-  };
-  type FolderTreeEntry = FolderEntry | TrackEntry;
 
   interface Props {
     node: FolderTreeEntry;

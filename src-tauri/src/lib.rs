@@ -1768,6 +1768,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_library_get_albums_metadata,
             commands_v2::v2_library_get_folders,
             commands_v2::v2_library_get_folders_with_metadata,
+            commands_v2::v2_library_count_folder_tracks,
             commands_v2::v2_library_list_folder_children,
             commands_v2::v2_library_list_folder_tracks,
             commands_v2::v2_library_list_folder_tracks_recursive,

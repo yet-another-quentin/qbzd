@@ -2692,6 +2692,27 @@ pub async fn v2_library_list_folder_tracks_recursive(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_count_folder_tracks(
+    folderPath: String,
+    excludeNetworkFolders: Option<bool>,
+    state: State<'_, LibraryState>,
+) -> Result<u32, String> {
+    log::info!(
+        "Command: v2_library_count_folder_tracks {} (exclude_network={:?})",
+        folderPath,
+        excludeNetworkFolders
+    );
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.count_folder_tracks_recursive(&folderPath, excludeNetworkFolders.unwrap_or(false))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn v2_library_add_folder(
     path: String,
     state: State<'_, LibraryState>,

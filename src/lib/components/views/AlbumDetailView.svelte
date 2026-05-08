@@ -1098,6 +1098,7 @@
     width: 100%;
     height: 100%;
     padding: 8px 8px 100px 18px;
+    overflow-x: hidden;
     overflow-y: auto;
     position: relative;
   }

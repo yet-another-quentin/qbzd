@@ -10,6 +10,7 @@ use crate::library::{
     get_artwork_cache_dir, thumbnails, AudioFormat, LibraryState, LocalAlbum, LocalTrack,
     MetadataExtractor, PlaylistLocalTrack, PlaylistSettings, PlaylistStats, ScanProgress,
 };
+use qbz_library::FolderTreeEntry;
 use crate::lyrics::LyricsState;
 use crate::offline::OfflineState;
 use crate::offline_cache::OfflineCacheState;
@@ -2625,6 +2626,38 @@ pub async fn v2_library_get_folders_with_metadata(
     }
 
     Ok(folders)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_list_folder_children(
+    parentPath: String,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<FolderTreeEntry>, String> {
+    log::info!("Command: v2_library_list_folder_children {}", parentPath);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.list_folder_children(&parentPath)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_list_folder_tracks(
+    folderPath: String,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<LocalTrack>, String> {
+    log::info!("Command: v2_library_list_folder_tracks {}", folderPath);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.list_folder_tracks(&folderPath)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

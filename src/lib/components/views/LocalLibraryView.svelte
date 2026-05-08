@@ -56,6 +56,7 @@
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import LocalLibraryFolderTree from '$lib/components/LocalLibraryFolderTree.svelte';
   import LocalLibraryFolderDetail from '$lib/components/LocalLibraryFolderDetail.svelte';
+  import LocalLibraryFolderAlbumView from '$lib/components/LocalLibraryFolderAlbumView.svelte';
   import type { FolderEntry, FolderTreeEntry } from '$lib/types/folderTree';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
@@ -479,17 +480,15 @@
   }
 
   // Select a folder in the tree (left rail). Right pane routes via the
-  // selectedAlbumForTree derived — folders matching an album_group_key
-  // open the existing album-detail flow.
-  async function handleFolderTreeSelect(path: string) {
+  // `selectedAlbumForTree` derived: when the path maps to a known album
+  // the right pane renders the compact `LocalLibraryFolderAlbumView`
+  // (driven by `treeAlbumTracks`), otherwise the FolderDetail listing.
+  // We deliberately do NOT call `handleAlbumClick` here — that would set
+  // `selectedAlbum` and trigger the full-page album-detail takeover at
+  // line ~4563, hiding the tree rail. Tree mode keeps the navigation
+  // visible by loading album tracks into a separate state.
+  function handleFolderTreeSelect(path: string) {
     selectedFolderPath = path;
-    // If the path matches a known album, drive the existing
-    // album-detail flow so the rest of the view (back button,
-    // edit modal, queue context) keeps working unchanged.
-    const album = albumByGroupKey.get(path);
-    if (album) {
-      await handleAlbumClick(album);
-    }
   }
 
   // Recursive play: queue every track whose file_path lives under the
@@ -950,6 +949,131 @@
   const selectedAlbumForTree = $derived(
     selectedFolderPath ? (albumByGroupKey.get(selectedFolderPath) ?? null) : null,
   );
+
+  // Track list for the compact album view rendered in tree-mode's right
+  // pane. Kept separate from the page-level `albumTracks` array (which is
+  // bound to `selectedAlbum` and the full-page album-detail view at
+  // line ~4563) so the tree rail stays visible while browsing an album.
+  let treeAlbumTracks = $state<LocalTrack[]>([]);
+  let treeAlbumTracksLoading = $state(false);
+
+  // Load tracks whenever the tree-selected album changes. The effect
+  // races correctly: it captures `targetAlbum.id` at fire time and only
+  // commits the result when the selection still matches, so a fast
+  // tree-click sequence doesn't render stale tracks.
+  $effect(() => {
+    const targetAlbum = selectedAlbumForTree;
+    if (!targetAlbum) {
+      treeAlbumTracks = [];
+      treeAlbumTracksLoading = false;
+      return;
+    }
+    const targetId = targetAlbum.id;
+    treeAlbumTracksLoading = true;
+    fetchAlbumTracks(targetAlbum)
+      .then((loaded) => {
+        if (selectedAlbumForTree?.id !== targetId) return;
+        treeAlbumTracks = loaded;
+      })
+      .catch((err) => {
+        if (selectedAlbumForTree?.id !== targetId) return;
+        console.error('[LocalLibrary] Failed to load tree album tracks:', err);
+        treeAlbumTracks = [];
+      })
+      .finally(() => {
+        if (selectedAlbumForTree?.id !== targetId) return;
+        treeAlbumTracksLoading = false;
+      });
+  });
+
+  // Play / shuffle the entire compact-view album. Mirrors
+  // handlePlayAllAlbum / handleShuffleAllAlbum but operates on
+  // `treeAlbumTracks` and sets the playback context against
+  // `selectedAlbumForTree` so the player's "now playing from" label and
+  // the queue-source remain accurate. We can't use the page-level
+  // helpers verbatim because they read `selectedAlbum`, which we
+  // intentionally never set in tree mode (that would trigger the
+  // page-takeover view).
+  async function handleTreeAlbumPlayAll() {
+    const target = selectedAlbumForTree;
+    if (!target || treeAlbumTracks.length === 0) return;
+    try {
+      await setPlaybackContext(
+        'local_library',
+        target.id,
+        target.title,
+        target.source === 'plex' ? 'plex' : 'local',
+        treeAlbumTracks.map((trk) => trk.id),
+        0,
+      );
+      await setQueueForAlbumTracks(treeAlbumTracks, 0);
+      if (onTrackPlay) {
+        await Promise.resolve(onTrackPlay(treeAlbumTracks[0]));
+      } else if (treeAlbumTracks[0].source !== 'plex') {
+        await invoke('v2_library_play_track', { trackId: treeAlbumTracks[0].id });
+      }
+    } catch (err) {
+      console.error('[LocalLibrary] tree album play-all failed:', err);
+    }
+  }
+
+  async function handleTreeAlbumShuffleAll() {
+    const target = selectedAlbumForTree;
+    if (!target || treeAlbumTracks.length === 0) return;
+    try {
+      await invoke('v2_set_shuffle', { enabled: true });
+      const randomIndex = Math.floor(Math.random() * treeAlbumTracks.length);
+      const randomTrack = treeAlbumTracks[randomIndex];
+      await setPlaybackContext(
+        'local_library',
+        target.id,
+        target.title,
+        target.source === 'plex' ? 'plex' : 'local',
+        treeAlbumTracks.map((trk) => trk.id),
+        randomIndex,
+      );
+      await setQueueForAlbumTracks(treeAlbumTracks, randomIndex);
+      if (onTrackPlay) {
+        await Promise.resolve(onTrackPlay(randomTrack));
+      } else if (randomTrack.source !== 'plex') {
+        await invoke('v2_library_play_track', { trackId: randomTrack.id });
+      }
+    } catch (err) {
+      console.error('[LocalLibrary] tree album shuffle failed:', err);
+    }
+  }
+
+  // Track click inside the compact album view — sets the playback context
+  // against the tree-selected album (not `selectedAlbum`, which is
+  // page-takeover-bound) and starts playback at that index. Same
+  // reasoning as handleTreeAlbumPlayAll above.
+  async function handleTreeAlbumTrackPlay(track: LocalTrack) {
+    const target = selectedAlbumForTree;
+    if (!target || treeAlbumTracks.length === 0) {
+      await handleTrackPlay(track);
+      return;
+    }
+    try {
+      const trackIndex = treeAlbumTracks.findIndex((trk) => trk.id === track.id);
+      const startIndex = trackIndex >= 0 ? trackIndex : 0;
+      await setPlaybackContext(
+        'local_library',
+        target.id,
+        target.title,
+        target.source === 'plex' ? 'plex' : 'local',
+        treeAlbumTracks.map((trk) => trk.id),
+        startIndex,
+      );
+      await setQueueForAlbumTracks(treeAlbumTracks, startIndex);
+      if (onTrackPlay) {
+        await Promise.resolve(onTrackPlay(track));
+      } else if (track.source !== 'plex') {
+        await invoke('v2_library_play_track', { trackId: track.id });
+      }
+    } catch (err) {
+      console.error('[LocalLibrary] tree album track play failed:', err);
+    }
+  }
 
   // ───────── Folders tab tree-mode search state ─────────
   // Tree-mode search piggybacks on the existing folders-tab search input
@@ -5142,16 +5266,35 @@
               </div>
               <div class="folder-content-column">
                 {#if selectedAlbumForTree}
-                  <!-- Album-detail render is driven by the existing
-                       `selectedAlbum` state — handleFolderTreeSelect
-                       calls handleAlbumClick when the tree path maps to
-                       a known album, which sets selectedAlbum and
-                       triggers the top-level album-detail view at the
-                       parent ViewTransition (line ~3901). The right
-                       pane stays empty while the album-detail takes
-                       over the page; this branch exists so we don't
-                       fall through to FolderDetail for album folders. -->
-                  <div class="folders-tree-empty-state"></div>
+                  <!-- Compact album view: artwork + metadata + play +
+                       track list, sized for the right pane so the tree
+                       rail stays visible. The full-page album-detail
+                       view at line ~4573 is reserved for flat mode and
+                       direct nav; tree mode keeps the user oriented in
+                       the folder hierarchy by rendering inline here. -->
+                  <LocalLibraryFolderAlbumView
+                    album={selectedAlbumForTree}
+                    tracks={treeAlbumTracks}
+                    {activeTrackId}
+                    {isPlaybackActive}
+                    onPlayAll={handleTreeAlbumPlayAll}
+                    onShuffleAll={handleTreeAlbumShuffleAll}
+                    onTrackPlay={handleTreeAlbumTrackPlay}
+                    {onTrackPlayNext}
+                    {onTrackPlayLater}
+                    {onTrackAddToPlaylist}
+                    {onTrackAddPlexToPlaylist}
+                    onArtistClick={handleLocalArtistClick}
+                    {formatDuration}
+                    {formatTotalDuration}
+                    {formatBitDepth}
+                    {formatSampleRate}
+                    {getQualityBadge}
+                    {isHiRes}
+                    {getFullArtworkUrl}
+                    {buildAlbumSections}
+                    {normalizeArtistName}
+                  />
                 {:else if selectedFolderPath}
                   <LocalLibraryFolderDetail
                     folderPath={selectedFolderPath}

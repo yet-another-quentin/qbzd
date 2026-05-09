@@ -99,7 +99,7 @@
             <span class="label">{$t('about.buildInfo.version')}</span>
             <span class="value">{appVersion}</span>
             <span class="label">{$t('about.buildInfo.codename')}</span>
-            <span class="value codename">Quiet Polish</span>
+            <span class="value codename">Exclusive Hardening</span>
             <span class="label">{$t('about.buildInfo.license')}</span>
             <span class="value">MIT</span>
             <span class="label">{$t('about.buildInfo.platform')}</span>
@@ -188,6 +188,16 @@
             <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/AdamArstall')}>
               <img src="https://github.com/AdamArstall.png?size=28" alt="AdamArstall" class="contributor-avatar" />
               AdamArstall
+              <ExternalLink size={10} />
+            </button>
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/Vudgekek')}>
+              <img src="https://github.com/Vudgekek.png?size=28" alt="Vudgekek" class="contributor-avatar" />
+              Vudgekek
+              <ExternalLink size={10} />
+            </button>
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/DoubleGate')}>
+              <img src="https://github.com/DoubleGate.png?size=28" alt="DoubleGate" class="contributor-avatar" />
+              DoubleGate
               <ExternalLink size={10} />
             </button>
           </div>

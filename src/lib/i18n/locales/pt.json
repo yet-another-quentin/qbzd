@@ -904,7 +904,10 @@
       "resizeHandle": "Redimensionar barra lateral da árvore de pastas",
       "searchTracksPlaceholder": "Buscar faixas…",
       "searchTracksLabel": "Buscar faixas neste álbum",
-      "searchNoResults": "Nenhuma faixa corresponde à sua busca."
+      "searchNoResults": "Nenhuma faixa corresponde à sua busca.",
+      "collapseAll": "Recolher todas as pastas",
+      "searchPlaceholder": "Buscar pastas…",
+      "searchAriaLabel": "Buscar pastas na árvore"
     },
     "folderListTitle": "Pastas da Biblioteca",
     "editTabs": {

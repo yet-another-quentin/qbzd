@@ -904,7 +904,10 @@
       "resizeHandle": "Redimensionar barra lateral del árbol de carpetas",
       "searchTracksPlaceholder": "Buscar pistas…",
       "searchTracksLabel": "Buscar pistas en este álbum",
-      "searchNoResults": "Ninguna pista coincide con la búsqueda."
+      "searchNoResults": "Ninguna pista coincide con la búsqueda.",
+      "collapseAll": "Contraer todas las carpetas",
+      "searchPlaceholder": "Buscar carpetas…",
+      "searchAriaLabel": "Buscar carpetas en el árbol"
     },
     "folderListTitle": "Carpetas de la Biblioteca",
     "editTabs": {

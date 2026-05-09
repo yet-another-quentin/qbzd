@@ -9,7 +9,7 @@
   import {
     HardDrive, Music, Disc3, MicVocal, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, CircleAlert, ImageDown, Upload, Search, LayoutGrid, List, ListOrdered, PenLine,
-    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check, SquareCheckBig, CassetteTape
+    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check, SquareCheckBig, CassetteTape, ChevronsDownUp
   } from 'lucide-svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
@@ -478,6 +478,16 @@
     } else {
       treeExpandedPaths.add(path);
     }
+  }
+
+  // Collapse every expanded folder in the tree by wiping
+  // `treeExpandedPaths`. The tree component reads `expandedPaths`
+  // reactively so all rows fold back to scan-root level. Triggered by
+  // the toolbar collapse-all button. We do NOT touch the search-mode
+  // snapshot here; if the user has an active tree-search filter, the
+  // pre-search expand snapshot will still restore on clear.
+  function collapseAllTreeFolders() {
+    treeExpandedPaths = new SvelteSet<string>();
   }
 
   // Select a folder in the tree (left rail). Right pane routes via the
@@ -1093,6 +1103,11 @@
   // Snapshot of `treeExpandedPaths` taken on the FIRST non-empty keystroke
   // and restored when the query is cleared. Null while no search is active.
   let preSearchExpandedSnapshot = $state<SvelteSet<string> | null>(null);
+  // Raw value bound to the dedicated tree-mode search input rendered in
+  // the tree column toolbar. Decoupled from `albumSearch` (which still
+  // drives the flat-mode album grid filter) so tree mode has its own
+  // input and clearing one does not affect the other.
+  let treeSearchInput = $state('');
   // Trimmed-lowercase copy of the current tree-search query, exposed to
   // the tree component for the matched-segment highlight. Empty string
   // when there is no active filter.
@@ -1167,11 +1182,12 @@
     }, 200);
   }
 
-  // Drive the tree-mode search effect off the existing `albumSearch`
-  // input + tab/mode state. When the user leaves the folders tree (tab
-  // switch or mode toggle) we wipe the active filter so nothing is
-  // hidden when they come back. The flat-mode search already handles
-  // the album list filtering via `debouncedAlbumSearch`.
+  // Drive the tree-mode search effect off the dedicated `treeSearchInput`
+  // (rendered in the tree column toolbar) plus tab/mode state. When the
+  // user leaves the folders tree (tab switch or mode toggle) we wipe the
+  // active filter so nothing is hidden when they come back. The flat-mode
+  // search continues to use `albumSearch`/`debouncedAlbumSearch`
+  // independently — the two inputs no longer share state.
   $effect(() => {
     if (activeTab !== 'folders' || foldersViewMode !== 'tree') {
       // Leaving tree mode — clear filter and any pending debounce.
@@ -1187,9 +1203,10 @@
         searchVisiblePaths = null;
         treeSearchQuery = '';
       }
+      treeSearchInput = '';
       return;
     }
-    scheduleFolderTreeSearch(albumSearch);
+    scheduleFolderTreeSearch(treeSearchInput);
   });
 
   // Fetch recursive descendant counts for every enabled scan-root row in
@@ -5227,7 +5244,7 @@
                 <div class="folder-tree-column-toolbar">
                   <button
                     type="button"
-                    class="control-btn icon-only"
+                    class="tree-toolbar-btn"
                     class:active={treeSelectMode}
                     onclick={toggleTreeSelectMode}
                     title={treeSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
@@ -5235,6 +5252,22 @@
                   >
                     <SquareCheckBig size={16} />
                   </button>
+                  <button
+                    type="button"
+                    class="tree-toolbar-btn"
+                    onclick={collapseAllTreeFolders}
+                    title={$t('library.foldersTree.collapseAll')}
+                    aria-label={$t('library.foldersTree.collapseAll')}
+                  >
+                    <ChevronsDownUp size={16} />
+                  </button>
+                  <input
+                    type="search"
+                    class="tree-search-input"
+                    placeholder={$t('library.foldersTree.searchPlaceholder')}
+                    bind:value={treeSearchInput}
+                    aria-label={$t('library.foldersTree.searchAriaLabel')}
+                  />
                 </div>
                 <div class="folder-tree-scroll">
                   {#if treeScanRoots.length === 0}
@@ -8088,9 +8121,55 @@
   .folder-tree-column-toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     padding: 4px 12px 8px 0;
     flex-shrink: 0;
+  }
+
+  /* Flat icon button used for the select-mode toggle and the
+     collapse-all action. No background or border in the resting
+     state — only a subtle hover background to telegraph the hit area,
+     and a color shift to the accent when `.active` (drives the
+     select-mode "on" feedback). User explicitly asked for this to
+     stay flat: "que sea un boton plano y solo cambie de color". */
+  .tree-toolbar-btn {
+    background: transparent;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 120ms, background 120ms;
+  }
+  .tree-toolbar-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.04));
+  }
+  .tree-toolbar-btn.active {
+    color: var(--accent-color, var(--accent-primary));
+  }
+
+  /* Dedicated tree-mode search input. Decoupled from the global
+     `albumSearch` input — driving its own filter via `treeSearchInput`
+     in the script. Expands to fill the toolbar's remaining width so
+     the two icon buttons sit at the start and the search input takes
+     the rest. */
+  .tree-search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+  .tree-search-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
   }
 
   .folder-tree-column {

@@ -904,7 +904,10 @@
       "resizeHandle": "Redimensionner la barre latérale de l'arborescence des dossiers",
       "searchTracksPlaceholder": "Rechercher des titres…",
       "searchTracksLabel": "Rechercher des titres dans cet album",
-      "searchNoResults": "Aucun titre ne correspond à votre recherche."
+      "searchNoResults": "Aucun titre ne correspond à votre recherche.",
+      "collapseAll": "Réduire tous les dossiers",
+      "searchPlaceholder": "Rechercher des dossiers…",
+      "searchAriaLabel": "Rechercher des dossiers dans l'arborescence"
     },
     "folderListTitle": "Dossiers de la bibliothèque",
     "editTabs": {

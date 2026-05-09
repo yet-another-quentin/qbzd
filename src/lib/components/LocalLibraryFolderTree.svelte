@@ -82,7 +82,6 @@
   const isFolder = $derived(node.kind === 'folder');
   const isExpanded = $derived(isFolder && expandedPaths.has(node.path));
   const isSelected = $derived(node.path === selectedPath);
-  const trackCount = $derived(node.kind === 'folder' ? node.track_count_under : 0);
 
   let children = $state<FolderTreeEntry[] | null>(null);
   let loading = $state(false);
@@ -271,9 +270,6 @@
     {:else}
       {node.segment}
     {/if}
-    {#if isFolder && trackCount > 0}
-      <span class="row-count-inline">({trackCount})</span>
-    {/if}
   </span>
 </div>
 
@@ -424,14 +420,6 @@
     padding: 0 1px;
     border-radius: 2px;
   }
-  .row-count-inline {
-    margin-left: 6px;
-    font-size: 0.7rem;
-    color: var(--text-tertiary, var(--text-muted, #888));
-    opacity: 0.7;
-    font-weight: normal;
-  }
-
   .folder-tree-loading,
   .folder-tree-empty,
   .folder-tree-error {

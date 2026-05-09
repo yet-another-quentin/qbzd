@@ -904,7 +904,10 @@
       "resizeHandle": "Größe der Ordnerbaum-Seitenleiste ändern",
       "searchTracksPlaceholder": "Titel suchen…",
       "searchTracksLabel": "Titel in diesem Album suchen",
-      "searchNoResults": "Keine Titel entsprechen deiner Suche."
+      "searchNoResults": "Keine Titel entsprechen deiner Suche.",
+      "collapseAll": "Alle Ordner einklappen",
+      "searchPlaceholder": "Ordner suchen…",
+      "searchAriaLabel": "Ordner im Baum suchen"
     },
     "folderListTitle": "Bibliotheksordner",
     "editTabs": {

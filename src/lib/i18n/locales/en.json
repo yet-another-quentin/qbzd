@@ -904,7 +904,10 @@
       "resizeHandle": "Resize folder tree sidebar",
       "searchTracksPlaceholder": "Search tracks…",
       "searchTracksLabel": "Search tracks in this album",
-      "searchNoResults": "No tracks match your search."
+      "searchNoResults": "No tracks match your search.",
+      "collapseAll": "Collapse all folders",
+      "searchPlaceholder": "Search folders…",
+      "searchAriaLabel": "Search folders in tree"
     },
     "explicit": "Explicit",
     "folderListTitle": "Library Folders",

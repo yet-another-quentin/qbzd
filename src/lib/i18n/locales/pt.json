@@ -901,7 +901,10 @@
       "treeLoading": "Carregando…",
       "treeEmpty": "Esta pasta está vazia.",
       "playAllRecursive": "Reproduzir todas as faixas desta pasta",
-      "resizeHandle": "Redimensionar barra lateral da árvore de pastas"
+      "resizeHandle": "Redimensionar barra lateral da árvore de pastas",
+      "searchTracksPlaceholder": "Buscar faixas…",
+      "searchTracksLabel": "Buscar faixas neste álbum",
+      "searchNoResults": "Nenhuma faixa corresponde à sua busca."
     },
     "folderListTitle": "Pastas da Biblioteca",
     "editTabs": {

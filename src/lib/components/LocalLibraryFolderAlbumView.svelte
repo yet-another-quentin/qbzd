@@ -12,7 +12,7 @@
   // free of tight coupling to LocalLibraryView's local helpers without
   // duplicating them.
 
-  import { Disc3, Play, Shuffle, CircleAlert } from 'lucide-svelte';
+  import { Disc3, Play, Shuffle, CircleAlert, Search, X } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import TrackRow from './TrackRow.svelte';
   import { formatTrackTitle } from '$lib/utils/trackTitle';
@@ -121,11 +121,25 @@
     normalizeArtistName,
   }: Props = $props();
 
-  const albumSections = $derived(buildAlbumSections(tracks));
+  let trackSearchQuery = $state('');
+
+  const filteredTracks = $derived.by(() => {
+    const q = trackSearchQuery.trim().toLowerCase();
+    if (q === '') return tracks;
+    return tracks.filter((track) => {
+      const title = track.title?.toLowerCase() ?? '';
+      const artist = track.artist?.toLowerCase() ?? '';
+      return title.includes(q) || artist.includes(q);
+    });
+  });
+
+  const albumSections = $derived(buildAlbumSections(filteredTracks));
   const showDiscHeaders = $derived(albumSections.length > 1);
   const isVariousArtists = $derived(
     normalizeArtistName(album.artist) === 'various artists'
   );
+  const isSearching = $derived(trackSearchQuery.trim() !== '');
+  const noResults = $derived(isSearching && filteredTracks.length === 0);
 </script>
 
 <div class="folder-album-view">
@@ -180,25 +194,49 @@
       <div class="folder-album-actions">
         <button
           type="button"
-          class="folder-album-action-btn primary"
+          class="action-btn-circle primary"
           onclick={onPlayAll}
           disabled={tracks.length === 0}
           title={$t('actions.playAll')}
           aria-label={$t('actions.playAll')}
         >
-          <Play size={16} fill="currentColor" color="currentColor" />
-          <span>{$t('actions.playAll')}</span>
+          <Play size={20} fill="currentColor" color="currentColor" />
         </button>
         <button
           type="button"
-          class="folder-album-action-btn"
+          class="action-btn-circle"
           onclick={onShuffleAll}
           disabled={tracks.length === 0}
           title={$t('actions.shuffle')}
           aria-label={$t('actions.shuffle')}
         >
-          <Shuffle size={14} />
+          <Shuffle size={18} />
         </button>
+        <div
+          class="folder-album-track-search"
+          role="search"
+          aria-label={$t('library.foldersTree.searchTracksLabel')}
+        >
+          <Search size={14} />
+          <input
+            type="search"
+            class="folder-album-track-search-input"
+            placeholder={$t('library.foldersTree.searchTracksPlaceholder')}
+            bind:value={trackSearchQuery}
+            aria-label={$t('library.foldersTree.searchTracksLabel')}
+          />
+          {#if isSearching}
+            <button
+              type="button"
+              class="folder-album-track-search-clear"
+              onclick={() => (trackSearchQuery = '')}
+              title={$t('actions.close')}
+              aria-label={$t('actions.close')}
+            >
+              <X size={12} />
+            </button>
+          {/if}
+        </div>
       </div>
     </div>
   </div>
@@ -254,6 +292,10 @@
     {#if tracks.length === 0}
       <div class="folder-album-empty">
         {$t('library.foldersTree.treeLoading')}
+      </div>
+    {:else if noResults}
+      <div class="folder-album-empty">
+        {$t('library.foldersTree.searchNoResults')}
       </div>
     {/if}
   </div>
@@ -404,36 +446,70 @@
     align-items: center;
     gap: 8px;
     margin-top: 8px;
+    flex-wrap: wrap;
   }
 
-  .folder-album-action-btn {
+  /* Use the global .action-btn-circle / .action-btn-circle.primary classes
+     defined in app.css — same circular buttons used in AlbumDetailView,
+     TopQView, FavQView, FavoritesView, LabelView. No pills. */
+
+  .folder-album-track-search {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
+    padding: 4px 10px;
     background: var(--bg-secondary);
-    color: var(--text-primary);
     border: 1px solid var(--bg-tertiary);
-    border-radius: 999px;
-    cursor: pointer;
+    border-radius: 6px;
+    color: var(--text-muted);
+    margin-left: 8px;
+    min-width: 200px;
+    max-width: 100%;
+    transition: border-color 150ms ease;
+  }
+
+  .folder-album-track-search:focus-within {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+  }
+
+  .folder-album-track-search-input {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
     font-family: inherit;
     font-size: 12px;
-    transition: opacity 100ms ease, background 100ms ease;
   }
 
-  .folder-album-action-btn.primary {
-    background: var(--accent-primary);
-    color: var(--btn-primary-text, white);
-    border-color: transparent;
+  .folder-album-track-search-input::placeholder {
+    color: var(--text-muted);
   }
 
-  .folder-album-action-btn:hover:not(:disabled) {
-    opacity: 0.9;
+  .folder-album-track-search-input::-webkit-search-cancel-button {
+    display: none;
   }
 
-  .folder-album-action-btn:disabled {
-    opacity: 0.4;
-    cursor: default;
+  .folder-album-track-search-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background 150ms ease, color 150ms ease;
+  }
+
+  .folder-album-track-search-clear:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
   }
 
   /* Track list — reuse TrackRow's grid columns. The header here mirrors

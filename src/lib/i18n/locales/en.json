@@ -901,7 +901,10 @@
       "treeLoading": "Loading…",
       "treeEmpty": "This folder is empty.",
       "playAllRecursive": "Play all tracks in this folder",
-      "resizeHandle": "Resize folder tree sidebar"
+      "resizeHandle": "Resize folder tree sidebar",
+      "searchTracksPlaceholder": "Search tracks…",
+      "searchTracksLabel": "Search tracks in this album",
+      "searchNoResults": "No tracks match your search."
     },
     "explicit": "Explicit",
     "folderListTitle": "Library Folders",

@@ -901,7 +901,10 @@
       "treeLoading": "Lädt…",
       "treeEmpty": "Dieser Ordner ist leer.",
       "playAllRecursive": "Alle Titel in diesem Ordner abspielen",
-      "resizeHandle": "Größe der Ordnerbaum-Seitenleiste ändern"
+      "resizeHandle": "Größe der Ordnerbaum-Seitenleiste ändern",
+      "searchTracksPlaceholder": "Titel suchen…",
+      "searchTracksLabel": "Titel in diesem Album suchen",
+      "searchNoResults": "Keine Titel entsprechen deiner Suche."
     },
     "folderListTitle": "Bibliotheksordner",
     "editTabs": {

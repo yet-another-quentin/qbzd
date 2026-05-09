@@ -901,7 +901,10 @@
       "treeLoading": "Cargando…",
       "treeEmpty": "Esta carpeta está vacía.",
       "playAllRecursive": "Reproducir todas las pistas de esta carpeta",
-      "resizeHandle": "Redimensionar barra lateral del árbol de carpetas"
+      "resizeHandle": "Redimensionar barra lateral del árbol de carpetas",
+      "searchTracksPlaceholder": "Buscar pistas…",
+      "searchTracksLabel": "Buscar pistas en este álbum",
+      "searchNoResults": "Ninguna pista coincide con la búsqueda."
     },
     "folderListTitle": "Carpetas de la Biblioteca",
     "editTabs": {

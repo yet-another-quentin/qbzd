@@ -901,7 +901,10 @@
       "treeLoading": "Chargement…",
       "treeEmpty": "Ce dossier est vide.",
       "playAllRecursive": "Lire tous les titres de ce dossier",
-      "resizeHandle": "Redimensionner la barre latérale de l'arborescence des dossiers"
+      "resizeHandle": "Redimensionner la barre latérale de l'arborescence des dossiers",
+      "searchTracksPlaceholder": "Rechercher des titres…",
+      "searchTracksLabel": "Rechercher des titres dans cet album",
+      "searchNoResults": "Aucun titre ne correspond à votre recherche."
     },
     "folderListTitle": "Dossiers de la bibliothèque",
     "editTabs": {

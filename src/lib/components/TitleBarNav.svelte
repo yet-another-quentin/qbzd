@@ -1,7 +1,14 @@
 <script lang="ts">
-  import { HardDrive, ChevronDown, User, Disc, Disc3, Music, ListMusic, ShoppingBag, CassetteTape, LibraryBig } from 'lucide-svelte';
+  import { HardDrive, ChevronDown, User, Disc, Disc3, Music, ListMusic, ShoppingBag, CassetteTape, LibraryBig, Folder } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { myQbzNavStore } from '$lib/stores/myQbzNavStore';
+  import {
+    libraryPreferencesStore,
+    loadLibraryPreferences,
+    type LibraryTabType,
+  } from '$lib/stores/libraryPreferencesStore';
+  import { libraryTargetTab } from '$lib/stores/libraryTargetTabStore';
+  import { onMount } from 'svelte';
 
   interface Props {
     activeView: string;
@@ -33,13 +40,54 @@
   let favoritesOpen = $state(false);
   let myQbzOpen = $state(false);
   let purchasesMenuOpen = $state(false);
+  let localLibraryOpen = $state(false);
   let discoverTimeout: ReturnType<typeof setTimeout> | null = null;
   let favoritesTimeout: ReturnType<typeof setTimeout> | null = null;
   let myQbzTimeout: ReturnType<typeof setTimeout> | null = null;
   let purchasesTimeout: ReturnType<typeof setTimeout> | null = null;
+  let localLibraryTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Visible tabs derived from the shared preferences store. Hidden tabs are
+  // filtered out so the dropdown matches whatever the user configured in
+  // LocalLibraryView's "Edit Library Tabs" modal.
+  const visibleLibraryTabs = $derived(
+    $libraryPreferencesStore.tab_order.filter(
+      (tab) => !$libraryPreferencesStore.hidden_tabs.includes(tab),
+    ),
+  );
+
+  // Initial fetch in case the user opens the dropdown before mounting
+  // LocalLibraryView (e.g. they're on Home and click the title-bar entry).
+  // LocalLibraryView's own load will overwrite this when it mounts.
+  onMount(() => {
+    void loadLibraryPreferences();
+  });
 
   function isDiscoverActive(): boolean {
     return activeView === 'home';
+  }
+
+  function openLocalLibrary() {
+    if (localLibraryTimeout) { clearTimeout(localLibraryTimeout); localLibraryTimeout = null; }
+    localLibraryOpen = true;
+    discoverOpen = false;
+    favoritesOpen = false;
+    myQbzOpen = false;
+    purchasesMenuOpen = false;
+  }
+
+  function closeLocalLibraryDelayed() {
+    localLibraryTimeout = setTimeout(() => { localLibraryOpen = false; }, 200);
+  }
+
+  function keepLocalLibrary() {
+    if (localLibraryTimeout) { clearTimeout(localLibraryTimeout); localLibraryTimeout = null; }
+  }
+
+  function handleLocalLibraryTab(tab: LibraryTabType) {
+    libraryTargetTab.set(tab);
+    onNavigate('library');
+    localLibraryOpen = false;
   }
 
   function isFavoritesActive(): boolean {
@@ -51,6 +99,7 @@
     discoverOpen = true;
     favoritesOpen = false;
     purchasesMenuOpen = false;
+    localLibraryOpen = false;
   }
 
   function closeDiscoverDelayed() {
@@ -66,6 +115,7 @@
     favoritesOpen = true;
     discoverOpen = false;
     purchasesMenuOpen = false;
+    localLibraryOpen = false;
   }
 
   function closeFavoritesDelayed() {
@@ -96,6 +146,7 @@
     discoverOpen = false;
     favoritesOpen = false;
     purchasesMenuOpen = false;
+    localLibraryOpen = false;
   }
 
   function closeMyQbzDelayed() {
@@ -117,6 +168,7 @@
     discoverOpen = false;
     favoritesOpen = false;
     myQbzOpen = false;
+    localLibraryOpen = false;
   }
 
   function closePurchasesDelayed() {
@@ -140,6 +192,7 @@
       favoritesOpen = false;
       myQbzOpen = false;
       purchasesMenuOpen = false;
+      localLibraryOpen = false;
     }
   }
 </script>
@@ -250,17 +303,57 @@
   </div>
   {/if}
 
-  <!-- Local Library (no dropdown) -->
+  <!-- Local Library (with dropdown: tabs in user-configured order). The
+       parent button still navigates to the Library view (preserving the
+       existing single-click landing behaviour); the chevron + hover open
+       the dropdown so users can jump straight to a specific tab. -->
   {#if showLibrary}
-  <button
-    class="nav-btn"
-    class:active={activeView === 'library' || activeView === 'library-album'}
-    onclick={handleLibrary}
-    data-tauri-drag-region="false"
+  <div
+    class="nav-btn-wrapper"
+    role="navigation"
+    onmouseenter={openLocalLibrary}
+    onmouseleave={closeLocalLibraryDelayed}
   >
-    <HardDrive size={12} />
-    <span class="nav-label">{$t('library.title')}</span>
-  </button>
+    <button
+      class="nav-btn"
+      class:active={activeView === 'library' || activeView === 'library-album'}
+      onclick={handleLibrary}
+      data-tauri-drag-region="false"
+    >
+      <HardDrive size={12} />
+      <span class="nav-label">{$t('library.title')}</span>
+      {#if visibleLibraryTabs.length > 0}
+        <ChevronDown size={10} />
+      {/if}
+    </button>
+    {#if localLibraryOpen && visibleLibraryTabs.length > 0}
+      <div
+        class="dropdown"
+        role="menu"
+        tabindex="-1"
+        onmouseenter={keepLocalLibrary}
+        onmouseleave={closeLocalLibraryDelayed}
+      >
+        {#each visibleLibraryTabs as tab (tab)}
+          <button
+            class="dropdown-item"
+            onclick={() => handleLocalLibraryTab(tab)}
+          >
+            {#if tab === 'tracks'}
+              <Music size={12} />
+            {:else if tab === 'albums'}
+              <Disc size={12} />
+            {:else if tab === 'artists'}
+              <User size={12} />
+            {:else if tab === 'folders'}
+              <Folder size={12} />
+            {/if}
+            <span>{$t(`library.${tab}`)}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </div>
   {/if}
 
   <!-- My QBZ (with dropdown: Mixtapes / Collections). Mirrors the sidebar's

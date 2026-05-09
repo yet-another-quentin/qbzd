@@ -12,7 +12,7 @@
   // free of tight coupling to LocalLibraryView's local helpers without
   // duplicating them.
 
-  import { Disc3, Play, Shuffle, CircleAlert, Search, X, SquareCheckBig, CassetteTape, ListPlus, ListEnd, ListMusic, Maximize2, Pencil } from 'lucide-svelte';
+  import { Disc3, Play, Shuffle, CircleAlert, Search, X, SquareCheckBig, CassetteTape, ListPlus, ListEnd, ListMusic } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import TrackRow from './TrackRow.svelte';
@@ -151,14 +151,15 @@
 
   let trackSearchQuery = $state('');
 
-  // Artwork right-click menu state. The right-click on the album artwork
-  // opens a small two-option context menu (View album art / Edit metadata)
-  // instead of opening the edit modal directly. Position is captured from
-  // the originating mouse event and rendered via `position: fixed`.
-  let artworkContextMenuOpen = $state(false);
-  let artworkContextMenuX = $state(0);
-  let artworkContextMenuY = $state(0);
-  let artworkLightboxOpen = $state(false);
+  // Cover context menu — uses the canonical .cover-context-* classes from
+  // AlbumDetailView so the menu visually matches the rest of the app.
+  // Local-library artwork is a file path, not a remote URL, and cover
+  // changes belong to the metadata editor — so this menu only exposes the
+  // two actions that apply here: View album art (opens lightbox) and
+  // Edit metadata (opens the parent's edit-album modal).
+  let lightboxOpen = $state(false);
+  let showCoverMenu = $state(false);
+  let coverMenuPos = $state({ x: 0, y: 0 });
 
   // Local selection state — independent from the LocalLibraryView's global
   // tracks-tab `selectedTrackIds` so navigating between albums in the tree
@@ -177,6 +178,16 @@
     selectionMode = false;
     selectedTrackIds = new Set();
   });
+
+  function handleViewArtwork() {
+    showCoverMenu = false;
+    if (album.artwork_path) lightboxOpen = true;
+  }
+
+  function handleEditMetadataFromMenu() {
+    showCoverMenu = false;
+    onEditAlbum?.();
+  }
 
   function toggleSelectionMode() {
     selectionMode = !selectionMode;
@@ -262,28 +273,6 @@
     selectedTrackIds = new Set();
   }
 
-  function handleViewArtwork() {
-    artworkContextMenuOpen = false;
-    artworkLightboxOpen = true;
-  }
-
-  function handleEditMetadata() {
-    artworkContextMenuOpen = false;
-    onEditAlbum?.();
-  }
-
-  // Close the artwork context menu on Escape. Listener is only attached
-  // while the menu is open so we don't pay the cost (or shadow other
-  // Escape handlers) when the menu is dismissed.
-  $effect(() => {
-    if (!artworkContextMenuOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') artworkContextMenuOpen = false;
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  });
-
   const filteredTracks = $derived.by(() => {
     const q = trackSearchQuery.trim().toLowerCase();
     if (q === '') return tracks;
@@ -309,21 +298,16 @@
        navigation), no edit / search / select chrome — those belong to the
        full-page album-detail view. -->
   <div class="folder-album-header">
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="folder-album-artwork"
-      oncontextmenu={onEditAlbum
-        ? (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            artworkContextMenuX = e.clientX;
-            artworkContextMenuY = e.clientY;
-            artworkContextMenuOpen = true;
-          }
-        : undefined}
+      onclick={() => { if (album.artwork_path) lightboxOpen = true; }}
+      onkeydown={(e) => { if (e.key === 'Enter' && album.artwork_path) lightboxOpen = true; }}
+      oncontextmenu={(e) => { e.preventDefault(); coverMenuPos = { x: e.clientX, y: e.clientY }; showCoverMenu = true; }}
+      role="button"
+      tabindex="0"
     >
       {#if album.artwork_path}
-        <img src={getFullArtworkUrl(album.artwork_path)} alt={album.title} />
+        <img src={getFullArtworkUrl(album.artwork_path)} alt={album.title} loading="lazy" />
       {:else}
         <div class="folder-album-artwork-placeholder">
           <Disc3 size={48} />
@@ -548,52 +532,39 @@
   </div>
 </div>
 
-{#if artworkContextMenuOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div
-    class="artwork-context-menu-overlay"
-    onclick={() => (artworkContextMenuOpen = false)}
-    oncontextmenu={(e) => { e.preventDefault(); artworkContextMenuOpen = false; }}
-    role="presentation"
-  >
-    <div
-      class="artwork-context-menu"
-      style:left="{artworkContextMenuX}px"
-      style:top="{artworkContextMenuY}px"
-      onclick={(e) => e.stopPropagation()}
-      oncontextmenu={(e) => e.stopPropagation()}
-      role="menu"
-      tabindex="-1"
-    >
-      <button
-        type="button"
-        class="artwork-context-menu-item"
-        onclick={handleViewArtwork}
-        role="menuitem"
-        disabled={!album.artwork_path}
-      >
-        <Maximize2 size={14} />
-        <span>{$t('library.foldersTree.viewArtwork')}</span>
-      </button>
-      <button
-        type="button"
-        class="artwork-context-menu-item"
-        onclick={handleEditMetadata}
-        role="menuitem"
-      >
-        <Pencil size={14} />
-        <span>{$t('metadata.editMetadata')}</span>
-      </button>
-    </div>
-  </div>
-{/if}
-
 <ImageLightbox
-  isOpen={artworkLightboxOpen}
-  onClose={() => (artworkLightboxOpen = false)}
+  isOpen={lightboxOpen}
+  onClose={() => lightboxOpen = false}
   src={album.artwork_path ? getFullArtworkUrl(album.artwork_path) : ''}
   alt={album.title ?? ''}
 />
+
+{#if showCoverMenu}
+  <div
+    class="cover-context-backdrop"
+    onclick={() => showCoverMenu = false}
+    onkeydown={(e) => { if (e.key === 'Escape') showCoverMenu = false; }}
+    role="button"
+    tabindex="-1"
+  ></div>
+  <div
+    class="cover-context-menu"
+    style="left: {coverMenuPos.x}px; top: {coverMenuPos.y}px;"
+  >
+    <button
+      class="cover-context-item"
+      onclick={handleViewArtwork}
+      disabled={!album.artwork_path}
+    >
+      {$t('library.foldersTree.viewArtwork')}
+    </button>
+    {#if onEditAlbum}
+      <button class="cover-context-item" onclick={handleEditMetadataFromMenu}>
+        {$t('metadata.editMetadata')}
+      </button>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .folder-album-view {
@@ -888,56 +859,57 @@
     font-size: 13px;
   }
 
-  /* Artwork right-click context menu — small two-option popover anchored
-     at the cursor. The transparent overlay catches outside-click and
-     right-click to dismiss the menu. Visual register matches the
-     existing TrackMenu style (bg-tertiary panel, soft shadow, 12px text). */
-  .artwork-context-menu-overlay {
+  /* Cover context menu — uses the canonical .cover-context-* classes
+     from AlbumDetailView so the menu visually matches the rest of the
+     app. Artwork is interactive (click opens lightbox, right-click
+     opens menu) — signal that with a pointer cursor. */
+  .folder-album-artwork {
+    cursor: pointer;
+  }
+
+  .cover-context-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 1000;
-    background: transparent;
+    z-index: 2999;
   }
 
-  .artwork-context-menu {
+  .cover-context-menu {
     position: fixed;
-    min-width: 180px;
-    padding: 4px;
-    background: var(--bg-tertiary);
+    z-index: 3000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
+    padding: 4px;
+    min-width: 200px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: coverMenuIn 100ms ease;
   }
 
-  .artwork-context-menu-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  @keyframes coverMenuIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .cover-context-item {
+    display: block;
+    width: 100%;
     padding: 8px 12px;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    font-family: inherit;
-    font-size: 12px;
-    text-align: left;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: background-color 150ms ease, color 150ms ease;
-  }
-
-  .artwork-context-menu-item:hover:not(:disabled) {
-    background-color: var(--bg-hover);
+    font-size: 13px;
     color: var(--text-primary);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 100ms ease;
   }
 
-  .artwork-context-menu-item:disabled {
+  .cover-context-item:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+
+  .cover-context-item:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .artwork-context-menu-item span {
-    flex: 1;
   }
 </style>

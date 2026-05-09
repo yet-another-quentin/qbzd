@@ -100,6 +100,10 @@
     onPlayHistoryTrack?: (trackId: string) => void;
     // Content flags
     explicit?: boolean;
+    /** Disable metadata-bound actions (favorite, etc) when the active
+     * track lives outside the library. Passed down to ImmersiveControls
+     * and PlayerControlsCompact. */
+    metadataActionsDisabled?: boolean;
   }
 
   let {
@@ -150,7 +154,8 @@
     onQueueClear,
     historyTracks = [],
     onPlayHistoryTrack,
-    explicit = false
+    explicit = false,
+    metadataActionsDisabled = false
   }: Props = $props();
 
   // UI State
@@ -778,6 +783,7 @@
       {onToggleShuffle}
       {onToggleRepeat}
       {onToggleFavorite}
+      {metadataActionsDisabled}
       {isInfinitePlay}
       {onToggleInfinitePlay}
       {onVolumeChange}

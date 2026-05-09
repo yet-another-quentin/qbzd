@@ -40,6 +40,7 @@
     "addToPlaylist": "Add to Playlist",
     "addToFavorites": "Add to Library",
     "removeFromFavorites": "Remove from Library",
+    "unavailableForEphemeral": "Not available for ephemeral folders",
     "removeFromPlaylist": "Remove from Playlist",
     "selectedTracks": "{count, plural, one {# track selected} other {# tracks selected}}",
     "select": "Select",

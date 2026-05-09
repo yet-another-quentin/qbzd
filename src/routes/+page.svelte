@@ -6727,6 +6727,7 @@
         {isFavorite}
         onToggleFavorite={toggleFavorite}
         onAddToPlaylist={openAddToPlaylistModal}
+        metadataActionsDisabled={currentTrack != null && currentTrack.id >= (1 << 48)}
         onOpenQueue={toggleQueue}
         onOpenMiniPlayer={() => {
           void enterMiniplayerMode();
@@ -6832,6 +6833,7 @@
         onToggleRepeat={toggleRepeat}
         {isFavorite}
         onToggleFavorite={toggleFavorite}
+        metadataActionsDisabled={currentTrack != null && currentTrack.id >= (1 << 48)}
         lyricsLines={lyricsLines}
         lyricsActiveIndex={lyricsActiveIndex}
         lyricsActiveProgress={lyricsActiveProgress}

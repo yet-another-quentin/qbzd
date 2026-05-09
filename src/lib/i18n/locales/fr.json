@@ -39,6 +39,7 @@
     "addToPlaylist": "Ajouter à la playlist",
     "addToFavorites": "Ajouter à la bibliothèque",
     "removeFromFavorites": "Retirer de la bibliothèque",
+    "unavailableForEphemeral": "Non disponible pour les dossiers éphémères",
     "removeFromPlaylist": "Retirer de la playlist",
     "selectedTracks": "{count, plural, one {# titre sélectionné} other {# titres sélectionnés}}",
     "select": "Sélectionner",

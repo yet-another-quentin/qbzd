@@ -95,6 +95,14 @@
     normalizationGain?: number | null;
     onToggleNormalization?: () => void;
     controlsDisabled?: boolean;
+    /**
+     * Hide the favorite + add-to-playlist buttons when the active track
+     * can't be persisted to library structures (today: ephemeral folder
+     * playback). Playback controls stay enabled — the user can still
+     * play / pause / skip / seek / volume; only the metadata-bound
+     * actions disappear.
+     */
+    metadataActionsDisabled?: boolean;
     explicit?: boolean;
     qconnectSessionSnapshot?: QconnectSessionSnapshot | null;
     onToggleQconnectConnection?: () => void | Promise<void>;
@@ -150,6 +158,7 @@
     normalizationGain = null,
     onToggleNormalization,
     controlsDisabled = false,
+    metadataActionsDisabled = false,
     explicit = false,
     qconnectSessionSnapshot = null,
     onToggleQconnectConnection,
@@ -491,23 +500,25 @@
 
       <button
         class="control-btn"
-        class:disabled={controlsDisabled}
-        disabled={controlsDisabled}
-        onclick={controlsDisabled ? undefined : onAddToPlaylist}
-        title={$translateStore('actions.addToPlaylist')}
+        class:disabled={controlsDisabled || metadataActionsDisabled}
+        disabled={controlsDisabled || metadataActionsDisabled}
+        onclick={controlsDisabled || metadataActionsDisabled ? undefined : onAddToPlaylist}
+        title={metadataActionsDisabled ? $translateStore('actions.unavailableForEphemeral') : $translateStore('actions.addToPlaylist')}
       >
         <Plus size={16} />
       </button>
 
       <button
         class="control-btn"
-        class:active={isFavorite && !controlsDisabled}
-        class:disabled={controlsDisabled}
-        disabled={controlsDisabled}
-        onclick={controlsDisabled ? undefined : onToggleFavorite}
-        title={isFavorite ? $translateStore('actions.removeFromFavorites') : $translateStore('actions.addToFavorites')}
+        class:active={isFavorite && !controlsDisabled && !metadataActionsDisabled}
+        class:disabled={controlsDisabled || metadataActionsDisabled}
+        disabled={controlsDisabled || metadataActionsDisabled}
+        onclick={controlsDisabled || metadataActionsDisabled ? undefined : onToggleFavorite}
+        title={metadataActionsDisabled
+          ? $translateStore('actions.unavailableForEphemeral')
+          : (isFavorite ? $translateStore('actions.removeFromFavorites') : $translateStore('actions.addToFavorites'))}
       >
-        <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
+        <Heart size={16} fill={isFavorite && !metadataActionsDisabled ? 'currentColor' : 'none'} />
       </button>
     </div>
 

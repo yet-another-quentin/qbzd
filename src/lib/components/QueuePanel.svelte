@@ -29,6 +29,18 @@
     parental_warning?: boolean;
   }
 
+  // Mirrors EPHEMERAL_ID_FLOOR (1 << 48) in src-tauri/src/ephemeral_library.
+  // Track ids at or above this threshold come from the in-memory ephemeral
+  // cache, not the library DB. Favorites / playlists / track-info actions
+  // require a DB row and don't make sense for ephemeral tracks; the
+  // helper below gates the corresponding UI off so users don't get
+  // dead-end clicks.
+  const EPHEMERAL_ID_FLOOR = 1 << 48;
+  function isEphemeralQueueTrack(id: string | number | null | undefined): boolean {
+    if (id == null) return false;
+    return Number(id) >= EPHEMERAL_ID_FLOOR;
+  }
+
   interface IndexedQueueTrack {
     track: QueueTrack;
     originalIndex: number;
@@ -349,11 +361,15 @@
               </div>
               <button
                 class="np-favorite"
-                class:active={currentTrackFavorite}
-                onclick={toggleCurrentTrackFavorite}
-                title={currentTrackFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
+                class:active={currentTrackFavorite && !isEphemeralQueueTrack(currentTrack.id)}
+                class:disabled={isEphemeralQueueTrack(currentTrack.id)}
+                disabled={isEphemeralQueueTrack(currentTrack.id)}
+                onclick={isEphemeralQueueTrack(currentTrack.id) ? undefined : toggleCurrentTrackFavorite}
+                title={isEphemeralQueueTrack(currentTrack.id)
+                  ? $t('actions.unavailableForEphemeral')
+                  : (currentTrackFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites'))}
               >
-                <Heart size={18} fill={currentTrackFavorite ? 'currentColor' : 'none'} />
+                <Heart size={18} fill={currentTrackFavorite && !isEphemeralQueueTrack(currentTrack.id) ? 'currentColor' : 'none'} />
               </button>
             </div>
           </div>
@@ -438,11 +454,23 @@
                           </button>
                         {/if}
 
-                        <button class="menu-item" onclick={(e) => handleAddToPlaylist(e, queueTrack.id)}>
+                        <button
+                          class="menu-item"
+                          class:disabled={isEphemeralQueueTrack(queueTrack.id)}
+                          disabled={isEphemeralQueueTrack(queueTrack.id)}
+                          onclick={(e) => { if (!isEphemeralQueueTrack(queueTrack.id)) handleAddToPlaylist(e, queueTrack.id); }}
+                          title={isEphemeralQueueTrack(queueTrack.id) ? $t('actions.unavailableForEphemeral') : ''}
+                        >
                           <ListPlus size={14} />
                           <span>{$t('actions.addToPlaylist')}</span>
                         </button>
-                        <button class="menu-item" onclick={(e) => handleShowTrackInfo(e, queueTrack.id)}>
+                        <button
+                          class="menu-item"
+                          class:disabled={isEphemeralQueueTrack(queueTrack.id)}
+                          disabled={isEphemeralQueueTrack(queueTrack.id)}
+                          onclick={(e) => { if (!isEphemeralQueueTrack(queueTrack.id)) handleShowTrackInfo(e, queueTrack.id); }}
+                          title={isEphemeralQueueTrack(queueTrack.id) ? $t('actions.unavailableForEphemeral') : ''}
+                        >
                           <Info size={14} />
                           <span>{$t('player.trackInfo')}</span>
                         </button>
@@ -497,11 +525,23 @@
                     </button>
                     {#if openHistoryMenuId === track.id}
                       <div class="track-context-menu">
-                        <button class="menu-item" onclick={(e) => handleAddToPlaylist(e, track.id)}>
+                        <button
+                          class="menu-item"
+                          class:disabled={isEphemeralQueueTrack(track.id)}
+                          disabled={isEphemeralQueueTrack(track.id)}
+                          onclick={(e) => { if (!isEphemeralQueueTrack(track.id)) handleAddToPlaylist(e, track.id); }}
+                          title={isEphemeralQueueTrack(track.id) ? $t('actions.unavailableForEphemeral') : ''}
+                        >
                           <ListPlus size={14} />
                           <span>{$t('actions.addToPlaylist')}</span>
                         </button>
-                        <button class="menu-item" onclick={(e) => handleShowTrackInfo(e, track.id)}>
+                        <button
+                          class="menu-item"
+                          class:disabled={isEphemeralQueueTrack(track.id)}
+                          disabled={isEphemeralQueueTrack(track.id)}
+                          onclick={(e) => { if (!isEphemeralQueueTrack(track.id)) handleShowTrackInfo(e, track.id); }}
+                          title={isEphemeralQueueTrack(track.id) ? $t('actions.unavailableForEphemeral') : ''}
+                        >
                           <Info size={14} />
                           <span>{$t('player.trackInfo')}</span>
                         </button>

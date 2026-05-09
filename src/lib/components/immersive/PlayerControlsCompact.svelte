@@ -48,6 +48,10 @@
     onMinimize?: () => void;
     onToggleFullscreen?: () => void;
     onToggleMaximize?: () => void;
+    /** Disable favorite when active track lives outside the library
+     * (today: ephemeral folder playback). Heart stays visible but
+     * inert. */
+    metadataActionsDisabled?: boolean;
   }
 
   let {
@@ -76,7 +80,8 @@
     onClose,
     onMinimize,
     onToggleFullscreen,
-    onToggleMaximize
+    onToggleMaximize,
+    metadataActionsDisabled = false
   }: Props = $props();
 
   let progressRef: HTMLDivElement | null = $state(null);
@@ -220,11 +225,15 @@
       <div class="controls-group left">
         <button
           class="control-btn"
-          class:active={isFavorite}
-          onclick={onToggleFavorite}
-          title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
+          class:active={isFavorite && !metadataActionsDisabled}
+          class:disabled={metadataActionsDisabled}
+          disabled={metadataActionsDisabled}
+          onclick={metadataActionsDisabled ? undefined : onToggleFavorite}
+          title={metadataActionsDisabled
+            ? $t('actions.unavailableForEphemeral')
+            : (isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites'))}
         >
-          <Heart size={12} fill={isFavorite ? 'currentColor' : 'none'} />
+          <Heart size={12} fill={isFavorite && !metadataActionsDisabled ? 'currentColor' : 'none'} />
         </button>
         <button
           class="control-btn"

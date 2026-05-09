@@ -1375,6 +1375,40 @@
     }
   }
 
+  // Compact album-view (LocalLibraryFolderAlbumView) bulk handlers.
+  // The compact view manages its own local selection set (so navigating
+  // between albums in the tree doesn't bleed selection across albums).
+  // It hands us the picked track IDs at fire-time; we resolve them
+  // against `treeAlbumTracks` (the tracks the compact view is rendering)
+  // and feed the same backend commands the tracks-tab path uses. The
+  // local/Plex split mirrors handleBulkAddToPlaylist above.
+  function resolveTreeAlbumTracksByIds(ids: number[]): LocalTrack[] {
+    const idSet = new Set(ids);
+    return treeAlbumTracks.filter((trk) => idSet.has(trk.id));
+  }
+
+  async function handleFolderAlbumBulkPlayNext(ids: number[]) {
+    const queueTracks = resolveTreeAlbumTracksByIds(ids).map(buildQueueTrackFromLocalTrack);
+    if (queueTracks.length === 0) return;
+    await cmdAddTracksToQueueNext(queueTracks);
+  }
+
+  async function handleFolderAlbumBulkPlayLater(ids: number[]) {
+    const queueTracks = resolveTreeAlbumTracksByIds(ids).map(buildQueueTrackFromLocalTrack);
+    if (queueTracks.length === 0) return;
+    await cmdAddTracksToQueue(queueTracks);
+  }
+
+  function handleFolderAlbumBulkAddToPlaylist(ids: number[]) {
+    if (ids.length === 0) return;
+    onBulkAddToPlaylist?.(ids);
+  }
+
+  function handleFolderAlbumBulkAddPlexToPlaylist(ratingKeys: string[]) {
+    if (ratingKeys.length === 0) return;
+    onBulkAddPlexToPlaylist?.(ratingKeys);
+  }
+
   // Multi-select for albums tab — mirrors track-select state.
   let albumSelectMode = $state(false);
   let selectedAlbumIds = $state(new Set<string>());
@@ -5336,6 +5370,10 @@
                     {onTrackPlayLater}
                     {onTrackAddToPlaylist}
                     {onTrackAddPlexToPlaylist}
+                    onBulkPlayNext={handleFolderAlbumBulkPlayNext}
+                    onBulkPlayLater={handleFolderAlbumBulkPlayLater}
+                    onBulkAddToPlaylist={handleFolderAlbumBulkAddToPlaylist}
+                    onBulkAddPlexToPlaylist={handleFolderAlbumBulkAddPlexToPlaylist}
                     onArtistClick={handleLocalArtistClick}
                     {formatDuration}
                     {formatTotalDuration}

@@ -12,8 +12,9 @@
   // free of tight coupling to LocalLibraryView's local helpers without
   // duplicating them.
 
-  import { Disc3, Play, Shuffle, CircleAlert, Search, X } from 'lucide-svelte';
+  import { Disc3, Play, Shuffle, CircleAlert, Search, X, SquareCheckBig, CassetteTape, ListPlus, ListEnd, ListMusic } from 'lucide-svelte';
   import { t } from '$lib/i18n';
+  import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import TrackRow from './TrackRow.svelte';
   import { formatTrackTitle } from '$lib/utils/trackTitle';
 
@@ -86,6 +87,18 @@
     onTrackAddToPlaylist?: (trackId: number) => void;
     onTrackAddPlexToPlaylist?: (filePath: string) => void;
     onArtistClick?: (name: string) => void;
+    /**
+     * Bulk handlers — when present, the compact view exposes per-track
+     * selection (checkboxes) plus a Play Next / Add to Queue / Add to
+     * Playlist row above the track list. Local + Plex split mirrors the
+     * full-page album-detail view so each path stays in its own backend
+     * namespace. Mixtape add for selection routes through the standard
+     * `openAddToMixtape` modal directly (no parent callback needed).
+     */
+    onBulkPlayNext?: (trackIds: number[]) => void;
+    onBulkPlayLater?: (trackIds: number[]) => void;
+    onBulkAddToPlaylist?: (trackIds: number[]) => void;
+    onBulkAddPlexToPlaylist?: (ratingKeys: string[]) => void;
     formatDuration: (seconds: number) => string;
     formatTotalDuration: (seconds: number) => string;
     formatBitDepth: (bits?: number) => string;
@@ -110,6 +123,10 @@
     onTrackAddToPlaylist,
     onTrackAddPlexToPlaylist,
     onArtistClick,
+    onBulkPlayNext,
+    onBulkPlayLater,
+    onBulkAddToPlaylist,
+    onBulkAddPlexToPlaylist,
     formatDuration,
     formatTotalDuration,
     formatBitDepth,
@@ -122,6 +139,108 @@
   }: Props = $props();
 
   let trackSearchQuery = $state('');
+
+  // Local selection state — independent from the LocalLibraryView's global
+  // tracks-tab `selectedTrackIds` so navigating between albums in the tree
+  // doesn't bleed selection across albums. Reset by the album-change
+  // $effect below.
+  let selectionMode = $state(false);
+  let selectedTrackIds = $state(new Set<number>());
+
+  // Reset selection whenever the user navigates to a different album in the
+  // tree. We track album.id explicitly (rather than the `tracks` reference)
+  // so re-renders that don't change the album leave selection untouched.
+  let lastAlbumId: string | null = null;
+  $effect(() => {
+    if (album.id === lastAlbumId) return;
+    lastAlbumId = album.id;
+    selectionMode = false;
+    selectedTrackIds = new Set();
+  });
+
+  function toggleSelectionMode() {
+    selectionMode = !selectionMode;
+    if (!selectionMode) selectedTrackIds = new Set();
+  }
+
+  function toggleTrackSelection(trackId: number) {
+    const next = new Set(selectedTrackIds);
+    if (next.has(trackId)) next.delete(trackId);
+    else next.add(trackId);
+    selectedTrackIds = next;
+  }
+
+  function clearSelection() {
+    selectedTrackIds = new Set();
+  }
+
+  /** Resolve the selected IDs back to the full LocalTrack objects so we
+   *  can split local vs Plex rows for the playlist add path. */
+  function selectedTracks(): LocalTrack[] {
+    return tracks.filter((trk) => selectedTrackIds.has(trk.id));
+  }
+
+  function handleBulkPlayNext() {
+    const ids = Array.from(selectedTrackIds);
+    if (ids.length === 0) return;
+    onBulkPlayNext?.(ids);
+    selectionMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  function handleBulkPlayLater() {
+    const ids = Array.from(selectedTrackIds);
+    if (ids.length === 0) return;
+    onBulkPlayLater?.(ids);
+    selectionMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  function handleBulkAddToPlaylist() {
+    const picked = selectedTracks();
+    if (picked.length === 0) return;
+    const localIds = picked.filter((trk) => trk.source !== 'plex').map((trk) => trk.id);
+    const plexRatingKeys = picked
+      .filter((trk) => trk.source === 'plex')
+      .map((trk) => trk.file_path);
+    if (localIds.length > 0) onBulkAddToPlaylist?.(localIds);
+    if (plexRatingKeys.length > 0) onBulkAddPlexToPlaylist?.(plexRatingKeys);
+    selectionMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  function handleAlbumAddToMixtape() {
+    openAddToMixtape({
+      item_type: 'album',
+      source: 'local',
+      source_item_id: album.id,
+      title: album.title,
+      subtitle: album.artist,
+      year: album.year,
+      track_count: album.track_count,
+    });
+  }
+
+  function handleBulkAddToMixtape() {
+    const picked = selectedTracks();
+    if (picked.length === 0) return;
+    // Mixtape items are limited to source 'qobuz' | 'local' (see
+    // AddToMixtapeItem). All compact-view rows live in `local_tracks` (Plex
+    // rows included, since they're tracked there too), so 'local' is correct
+    // for both. The numeric track id is the canonical key — same as the
+    // single-track TrackRow path in AlbumDetailView.
+    openAddToMixtape(
+      picked.map((trk) => ({
+        item_type: 'track' as const,
+        source: 'local' as const,
+        source_item_id: String(trk.id),
+        title: trk.title,
+        subtitle: [trk.artist, trk.album].filter(Boolean).join(' · '),
+      }))
+    );
+    selectionMode = false;
+    selectedTrackIds = new Set();
+  }
 
   const filteredTracks = $derived.by(() => {
     const q = trackSearchQuery.trim().toLowerCase();
@@ -212,6 +331,74 @@
         >
           <Shuffle size={18} />
         </button>
+        <button
+          type="button"
+          class="action-btn-circle"
+          class:is-active={selectionMode}
+          onclick={toggleSelectionMode}
+          disabled={tracks.length === 0}
+          title={selectionMode ? $t('actions.cancelSelection') : $t('actions.select')}
+          aria-label={selectionMode ? $t('actions.cancelSelection') : $t('actions.select')}
+          aria-pressed={selectionMode}
+        >
+          <SquareCheckBig size={18} />
+        </button>
+        <button
+          type="button"
+          class="action-btn-circle"
+          onclick={selectionMode && selectedTrackIds.size > 0 ? handleBulkAddToMixtape : handleAlbumAddToMixtape}
+          disabled={tracks.length === 0}
+          title={$t('common.addToMixtapeOrCollection')}
+          aria-label={$t('common.addToMixtapeOrCollection')}
+        >
+          <CassetteTape size={18} />
+        </button>
+        {#if selectionMode}
+          <button
+            type="button"
+            class="action-btn-circle"
+            onclick={handleBulkPlayNext}
+            disabled={selectedTrackIds.size === 0}
+            title={$t('actions.playNext')}
+            aria-label={$t('actions.playNext')}
+          >
+            <ListPlus size={18} />
+          </button>
+          <button
+            type="button"
+            class="action-btn-circle"
+            onclick={handleBulkPlayLater}
+            disabled={selectedTrackIds.size === 0}
+            title={$t('actions.addToQueue')}
+            aria-label={$t('actions.addToQueue')}
+          >
+            <ListEnd size={18} />
+          </button>
+          <button
+            type="button"
+            class="action-btn-circle"
+            onclick={handleBulkAddToPlaylist}
+            disabled={selectedTrackIds.size === 0}
+            title={$t('actions.addToPlaylist')}
+            aria-label={$t('actions.addToPlaylist')}
+          >
+            <ListMusic size={18} />
+          </button>
+          {#if selectedTrackIds.size > 0}
+            <span class="folder-album-selected-count">
+              {$t('actions.selectedTracks', { values: { count: selectedTrackIds.size } })}
+            </span>
+            <button
+              type="button"
+              class="folder-album-selection-clear"
+              onclick={clearSelection}
+              title={$t('actions.clearSelection')}
+              aria-label={$t('actions.clearSelection')}
+            >
+              <X size={14} />
+            </button>
+          {/if}
+        {/if}
         <div
           class="folder-album-track-search"
           role="search"
@@ -243,12 +430,15 @@
 
   <!-- Track list. Reuses TrackRow with the same callback wiring as the
        full-page album-detail view so the queue/play/context-menu actions
-       behave identically. Multi-select is intentionally omitted in the
-       compact view: tree mode already exposes recursive multi-select via
-       the FolderTree rail, which is the canonical bulk-select surface
-       inside the Folders tab. -->
+       behave identically. Selection state is local to this component
+       (resets when the user navigates to a different album in the tree)
+       so it doesn't bleed into the LocalLibraryView's tracks-tab global
+       selection. -->
   <div class="folder-album-tracks">
     <div class="folder-album-tracks-header">
+      {#if selectionMode}
+        <div class="col-select"></div>
+      {/if}
       <div class="col-number">#</div>
       <div class="col-title">{$t('tracklist.title')}</div>
       <div class="col-duration">{$t('tracklist.duration')}</div>
@@ -274,6 +464,9 @@
           localSource={track.source === 'plex' ? 'plex' : 'local'}
           hideDownload={true}
           hideFavorite={true}
+          selectable={selectionMode}
+          selected={selectedTrackIds.has(track.id)}
+          onToggleSelect={() => toggleTrackSelection(track.id)}
           onArtistClick={track.artist && track.artist !== album.artist && onArtistClick
             ? () => onArtistClick?.(track.artist)
             : undefined}
@@ -453,6 +646,38 @@
      defined in app.css — same circular buttons used in AlbumDetailView,
      TopQView, FavQView, FavoritesView, LabelView. No pills. */
 
+  .folder-album-selected-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    white-space: nowrap;
+    margin-left: 4px;
+  }
+
+  .folder-album-selection-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  .folder-album-selection-clear:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  /* Search lives at the far right of the action row regardless of how many
+     bulk-action buttons are visible. `margin-left: auto` consumes whatever
+     remaining space exists between the last action button and the row's
+     right edge so the search input stays pinned right. */
   .folder-album-track-search {
     display: flex;
     align-items: center;
@@ -462,7 +687,7 @@
     border: 1px solid var(--bg-tertiary);
     border-radius: 6px;
     color: var(--text-muted);
-    margin-left: 8px;
+    margin-left: auto;
     min-width: 200px;
     max-width: 100%;
     transition: border-color 150ms ease;
@@ -532,6 +757,14 @@
     letter-spacing: 0.5px;
     border-bottom: 1px solid var(--bg-tertiary);
     margin-bottom: 4px;
+  }
+
+  /* In selection mode the header gains a leading checkbox-width column
+     so it visually aligns with the TrackRow's checkbox column. The
+     column itself is empty (no select-all affordance in the compact
+     view — keeps the header lean). */
+  .folder-album-tracks-header:has(.col-select) {
+    grid-template-columns: 24px 50px 1fr 80px 100px 32px 32px 32px;
   }
 
   .folder-album-tracks-header .col-number {

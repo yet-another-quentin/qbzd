@@ -4989,9 +4989,6 @@
   {:else}
     <!-- Main Library View -->
     <div class="header">
-      <div class="header-icon">
-        <HardDrive size={32} />
-      </div>
       <div class="header-content">
         <h1>{$t('library.title')}</h1>
         {#if stats}
@@ -6113,17 +6110,6 @@
     align-items: center;
     gap: 20px;
     margin-bottom: 24px;
-  }
-
-  .header-icon {
-    width: 80px;
-    height: 80px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, var(--accent-primary) 0%, #64b5f6 100%);
-    border-radius: 16px;
-    color: white;
   }
 
   .header-content {

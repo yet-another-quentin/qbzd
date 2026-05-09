@@ -3430,6 +3430,26 @@
     return format === 'flac' && bitDepth <= 16 && sampleRate <= 44100;
   }
 
+  const PLEX_HYDRATION_BATCH_SIZE = 5;
+  const PLEX_HYDRATION_TIMEOUT_MS = 5000;
+
+  async function fetchPlexTrackMetadataWithTimeout(
+    baseUrl: string,
+    token: string,
+    ratingKey: string
+  ): Promise<PlexTrackMetadata | null> {
+    try {
+      return await Promise.race<PlexTrackMetadata>([
+        invoke<PlexTrackMetadata>('v2_plex_get_track_metadata', { baseUrl, token, ratingKey }),
+        new Promise<PlexTrackMetadata>((_, reject) =>
+          setTimeout(() => reject(new Error('plex_hydration_timeout')), PLEX_HYDRATION_TIMEOUT_MS)
+        )
+      ]);
+    } catch {
+      return null;
+    }
+  }
+
   async function hydratePlexTrackQuality(tracks: LocalTrack[]): Promise<LocalTrack[]> {
     const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
     const token = getUserItem('qbz-plex-poc-token') || '';
@@ -3438,33 +3458,27 @@
     const candidates = tracks.filter((track) => isLikelyFallbackPlexQuality(track));
     if (candidates.length === 0) return tracks;
 
-    const metadataEntries = await Promise.all(
-      candidates.map(async (track) => {
-        try {
-          const metadata = await invoke<PlexTrackMetadata>('v2_plex_get_track_metadata', {
-            baseUrl,
-            token,
-            ratingKey: track.file_path
-          });
-          return [track.file_path, metadata] as const;
-        } catch (error) {
-          console.warn('[LocalLibrary] Failed to hydrate Plex track metadata for', track.file_path, error);
-          return null;
-        }
-      })
-    );
-
     const metadataByRatingKey = new Map<string, PlexTrackMetadata>();
     const qualityUpdates: PlexTrackQualityUpdate[] = [];
-    for (const entry of metadataEntries) {
-      if (!entry) continue;
-      metadataByRatingKey.set(entry[0], entry[1]);
-      qualityUpdates.push({
-        ratingKey: entry[0],
-        container: entry[1].container ?? entry[1].codec,
-        samplingRateHz: entry[1].samplingRateHz,
-        bitDepth: entry[1].bitDepth
-      });
+
+    for (let i = 0; i < candidates.length; i += PLEX_HYDRATION_BATCH_SIZE) {
+      const batch = candidates.slice(i, i + PLEX_HYDRATION_BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map(async (track) => {
+          const metadata = await fetchPlexTrackMetadataWithTimeout(baseUrl, token, track.file_path);
+          return metadata ? ({ ratingKey: track.file_path, metadata } as const) : null;
+        })
+      );
+      for (const entry of results) {
+        if (!entry) continue;
+        metadataByRatingKey.set(entry.ratingKey, entry.metadata);
+        qualityUpdates.push({
+          ratingKey: entry.ratingKey,
+          container: entry.metadata.container ?? entry.metadata.codec,
+          samplingRateHz: entry.metadata.samplingRateHz,
+          bitDepth: entry.metadata.bitDepth
+        });
+      }
     }
     if (metadataByRatingKey.size === 0) return tracks;
 

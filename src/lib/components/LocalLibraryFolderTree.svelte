@@ -405,7 +405,14 @@
     /* No flex:1 / min-width:0 / overflow:hidden / text-overflow:ellipsis
        here — the row container (.folder-tree-row) extends to natural
        content width and the rail scrolls horizontally instead of
-       truncating long names. Single-line is preserved via nowrap. */
+       truncating long names. Single-line is preserved via nowrap.
+
+       `flex-shrink: 0` is required: without it, the default
+       `flex-shrink: 1` lets the name collapse before triggering the
+       row's `width: max-content` to expand, which suppresses the
+       horizontal scrollbar on the parent rail. Holding the natural
+       width here is what actually makes the long-name overflow real. */
+    flex-shrink: 0;
     font-size: 0.78rem;
     line-height: 1.3;
     white-space: nowrap;

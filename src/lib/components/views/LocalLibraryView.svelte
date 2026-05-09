@@ -5264,7 +5264,9 @@
                   aria-valuemax={folderTreeSidebarMaxWidth}
                   onmousedown={handleTreeSidebarMouseDown}
                   onkeydown={handleTreeSidebarKeyDown}
-                ></div>
+                >
+                  <div class="tree-sidebar-resize-pill" aria-hidden="true"></div>
+                </div>
               </div>
               <div class="folder-content-column">
                 {#if selectedAlbumForTree}
@@ -8081,12 +8083,20 @@
     position: absolute;
     top: 0;
     right: 0;
-    width: 6px;
+    /* 8px (vs prior 6px) widens the hit area so the divider is easier
+       to grab, especially on Wayland/XWayland where cursor-shape hand-
+       offs are less consistent than on X11. */
+    width: 8px;
     height: 100%;
     cursor: col-resize;
     background: transparent;
     transition: background 120ms ease;
     z-index: 1;
+    /* Centers the visible pill child vertically + horizontally on the
+       divider line. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
     /* Block selection bleed on the handle itself; the global override
        on <body> during drag handles the rest of the page. */
     user-select: none;
@@ -8094,23 +8104,53 @@
 
   .tree-sidebar-resize-handle:hover,
   .tree-sidebar-resize-handle.resizing {
-    background: var(--accent-color, var(--text-tertiary));
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.05));
+  }
+
+  /* Always-visible affordance: a small vertical pill marker centered on
+     the divider, low-opacity by default and brightening to the accent
+     color on hover/drag. Decorative — `aria-hidden` on the markup. */
+  .tree-sidebar-resize-pill {
+    width: 4px;
+    height: 36px;
+    border-radius: 2px;
+    background: var(--text-tertiary, var(--text-muted, #666));
+    opacity: 0.4;
+    transition:
+      opacity 120ms ease,
+      background 120ms ease;
+    pointer-events: none;
+  }
+
+  .tree-sidebar-resize-handle:hover .tree-sidebar-resize-pill,
+  .tree-sidebar-resize-handle.resizing .tree-sidebar-resize-pill {
+    opacity: 1;
+    background: var(--accent-color, var(--accent-primary, var(--text-primary)));
   }
 
   .folder-tree-scroll {
+    /* Block-level scroll wrapper. Long folder names extend past the
+       column width via `width: max-content` on `.folder-tree-row`, and
+       this wrapper renders the horizontal scrollbar at its own bottom
+       edge (Plex/foobar2000 pattern).
+
+       `contain: strict` was the regression: it includes `contain: size`,
+       which makes the element ignore descendants for intrinsic sizing.
+       In WebKit (Tauri) this caused scrollWidth to under-report on a
+       scroll container whose children use `width: max-content`, so the
+       horizontal scrollbar never appeared even though rows visibly
+       extended past the rail. Dropping `size` (keeping layout + paint
+       for perf) restores horizontal scrolling. */
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    /* Long folder names extend past the column width and scroll
-       horizontally inside the rail (Plex/foobar2000 pattern). The
-       resize handle stays anchored to .folder-tree-column (a sibling
-       of this scroll wrapper), so it doesn't drift with content. */
     overflow-x: auto;
     padding: 4px 12px 4px 0;
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     overscroll-behavior: contain;
     will-change: scroll-position;
-    contain: strict;
+    contain: layout paint;
   }
 
   .folder-content-column {

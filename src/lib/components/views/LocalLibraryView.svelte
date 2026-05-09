@@ -7,7 +7,7 @@
   import { onMount, onDestroy, tick, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import {
-    HardDrive, Music, Disc3, MicVocal, FolderPlus, Trash2, RefreshCw,
+    HardDrive, Music, Disc3, MicVocal, FolderPlus, FolderOpen, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, CircleAlert, ImageDown, Upload, Search, LayoutGrid, List, ListOrdered, PenLine,
     Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check, SquareCheckBig, CassetteTape, ChevronsDownUp
   } from 'lucide-svelte';
@@ -513,6 +513,12 @@
   // line ~4563, hiding the tree rail. Tree mode keeps the navigation
   // visible by loading album tracks into a separate state.
   function handleFolderTreeSelect(path: string) {
+    // Navigating to a tree folder ends the ephemeral session — the user
+    // is moving back into the library proper, so the in-memory cache and
+    // the right-pane override both get dropped.
+    if (ephemeralFolder) {
+      void closeEphemeralFolder();
+    }
     selectedFolderPath = path;
   }
 
@@ -561,6 +567,125 @@
   // using the existing handler (which also wires playback context).
   async function handleFolderTreeTrackPlay(track: LocalTrack) {
     await handleTrackPlay(track);
+  }
+
+  // Open an ad-hoc folder via the OS file picker. The backend scans the
+  // folder, extracts metadata for every supported audio file and stashes
+  // the result in EphemeralLibraryState (in-memory, negative ids). The
+  // tree itself is untouched — the right pane shows the result instead
+  // of the regular folder/album views. Replaces any prior ephemeral
+  // session.
+  async function openEphemeralFolder(): Promise<void> {
+    if (openingEphemeralFolder) return;
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: $t('library.ephemeralFolder.dialogTitle')
+      });
+      if (typeof selected !== 'string' || selected.length === 0) return;
+
+      openingEphemeralFolder = true;
+      // Clear the existing folder/album selection BEFORE assigning the
+      // ephemeral result. The $effect that closes ephemeral on
+      // selection-change reacts to either field becoming non-null while
+      // ephemeral is set; doing the reset first means we never enter the
+      // racy intermediate state where both ephemeral and a real
+      // selection are non-null at the same time.
+      selectedFolderPath = null;
+      selectedAlbum = null;
+      const result = await invoke<EphemeralFolderState>('v2_ephemeral_open_folder', {
+        path: selected
+      });
+      ephemeralFolder = result;
+      if (result.tracks.length === 0) {
+        showToast($t('library.ephemeralFolder.empty'), 'info');
+      } else if (result.skippedFiles > 0) {
+        showToast(
+          $t('library.ephemeralFolder.openedWithSkips', {
+            values: { count: result.tracks.length, skipped: result.skippedFiles }
+          }),
+          'success'
+        );
+      } else {
+        showToast(
+          $t('library.ephemeralFolder.opened', { values: { count: result.tracks.length } }),
+          'success'
+        );
+      }
+    } catch (err) {
+      console.error('[LocalLibrary] Failed to open ephemeral folder:', err);
+      showToast(
+        $t('library.ephemeralFolder.openFailed', { values: { error: String(err) } }),
+        'error'
+      );
+    } finally {
+      openingEphemeralFolder = false;
+    }
+  }
+
+  async function closeEphemeralFolder(): Promise<void> {
+    ephemeralFolder = null;
+    try {
+      await invoke('v2_ephemeral_clear');
+    } catch (err) {
+      console.warn('[LocalLibrary] Failed to clear ephemeral state:', err);
+    }
+  }
+
+  async function playEphemeralTrack(track: LocalTrack): Promise<void> {
+    if (!ephemeralFolder) return;
+    try {
+      const startIndex = ephemeralFolder.tracks.findIndex((item) => item.id === track.id);
+      await setPlaybackContext(
+        'local_library',
+        'ephemeral',
+        $t('library.ephemeralFolder.contextLabel'),
+        'local',
+        ephemeralFolder.tracks.map((item) => item.id),
+        Math.max(0, startIndex)
+      );
+      await setQueueForLocalTracks(ephemeralFolder.tracks, Math.max(0, startIndex));
+      await invoke('v2_library_play_track', { trackId: track.id });
+    } catch (err) {
+      const message = String(err);
+      console.error('[LocalLibrary] Failed to play ephemeral track:', err);
+      // Backend returns "Ephemeral file not found" / "Ephemeral track not found"
+      // when the folder or files have been moved/deleted/unmounted while the
+      // session was open. Treat that as the "directory or files no longer
+      // exist" cleanup trigger from the spec — drop the whole session so
+      // the user gets a clean slate instead of a half-broken pane.
+      if (message.includes('Ephemeral file not found')
+          || message.includes('Ephemeral track not found')) {
+        await closeEphemeralFolder();
+        showToast($t('library.ephemeralFolder.gone'), 'info');
+        return;
+      }
+      showToast(
+        $t('library.ephemeralFolder.playFailed', { values: { error: message } }),
+        'error'
+      );
+    }
+  }
+
+  // Spec rule: an ephemeral session "survives until a different album is
+  // loaded, the Clear/Close button is pressed, or the directory/files are
+  // gone". This effect handles the first trigger — anything that points
+  // the right pane at a real album or tree folder ends the session. The
+  // Close button handles the second trigger directly via closeEphemeralFolder;
+  // the playEphemeralTrack error path handles the third.
+  $effect(() => {
+    if (!ephemeralFolder) return;
+    if (selectedAlbum != null || selectedFolderPath != null) {
+      untrack(() => {
+        void closeEphemeralFolder();
+      });
+    }
+  });
+
+  async function playAllEphemeral(): Promise<void> {
+    if (!ephemeralFolder || ephemeralFolder.tracks.length === 0) return;
+    await playEphemeralTrack(ephemeralFolder.tracks[0]);
   }
 
   function handleLibraryPreferencesSaved(prefs: LibraryPreferences) {
@@ -878,6 +1003,25 @@
   // Path of the folder currently selected in the tree; drives the
   // right-pane routing (album-detail vs FolderDetail vs empty-state).
   let selectedFolderPath = $state<string | null>(null);
+
+  // Ephemeral folder session: when set, the right pane shows the contents
+  // of an ad-hoc folder the user opened via the "Open Folder" button. The
+  // tracks here have synthetic negative ids that route to the in-memory
+  // EphemeralLibraryState on the backend (see v2_library_play_track). The
+  // session vanishes on app exit (no DB persistence).
+  type EphemeralFolderState = {
+    folderPath: string;
+    tracks: LocalTrack[];
+    skippedFiles: number;
+  };
+  let ephemeralFolder = $state<EphemeralFolderState | null>(null);
+  let openingEphemeralFolder = $state(false);
+
+  const ephemeralFolderName = $derived.by(() => {
+    if (!ephemeralFolder) return '';
+    const segments = ephemeralFolder.folderPath.split('/').filter(Boolean);
+    return segments.length > 0 ? segments[segments.length - 1] : ephemeralFolder.folderPath;
+  });
   // Set of paths the user has expanded in the tree. Each top-level
   // <LocalLibraryFolderTree> shares this set so siblings stay in sync.
   let treeExpandedPaths = $state(new SvelteSet<string>());
@@ -901,8 +1045,8 @@
   // forcing the rail wider). Bounds: 200px floor; 40% of the live content
   // area as ceiling. Persisted on drag-end via
   // v2_set_library_folders_tree_sidebar_width.
-  const FOLDER_TREE_SIDEBAR_DEFAULT_WIDTH = 302;
-  const FOLDER_TREE_SIDEBAR_MIN_WIDTH = 200;
+  const FOLDER_TREE_SIDEBAR_DEFAULT_WIDTH = 290;
+  const FOLDER_TREE_SIDEBAR_MIN_WIDTH = 290;
   let folderTreeSidebarWidth = $state<number>(FOLDER_TREE_SIDEBAR_DEFAULT_WIDTH);
   let isResizingTreeSidebar = $state(false);
   let folderTreeContentAreaWidth = $state<number>(0);
@@ -5476,6 +5620,16 @@
                   >
                     <ChevronsDownUp size={14} />
                   </button>
+                  <button
+                    type="button"
+                    class="tree-toolbar-btn"
+                    onclick={openEphemeralFolder}
+                    disabled={openingEphemeralFolder}
+                    title={$t('library.ephemeralFolder.tooltip')}
+                    aria-label={$t('library.ephemeralFolder.buttonLabel')}
+                  >
+                    <FolderOpen size={14} />
+                  </button>
                   <input
                     type="search"
                     class="tree-search-input"
@@ -5538,7 +5692,81 @@
                 </div>
               </div>
               <div class="folder-content-column">
-                {#if selectedAlbumForTree}
+                {#if ephemeralFolder}
+                  <!-- Ephemeral session: an ad-hoc folder the user opened
+                       without persisting it to local_tracks. The track
+                       ids here are negative; play through them lands in
+                       the ephemeral branch of v2_library_play_track. -->
+                  <div class="ephemeral-pane">
+                    <div class="ephemeral-header">
+                      <div class="ephemeral-header-info">
+                        <FolderOpen size={20} class="ephemeral-icon" />
+                        <div class="ephemeral-titles">
+                          <div class="ephemeral-title">{ephemeralFolderName}</div>
+                          <div class="ephemeral-subtitle">
+                            {$t('library.ephemeralFolder.subtitle', {
+                              values: {
+                                count: ephemeralFolder.tracks.length,
+                                path: ephemeralFolder.folderPath
+                              }
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ephemeral-actions">
+                        <button
+                          type="button"
+                          class="ephemeral-play-btn"
+                          onclick={playAllEphemeral}
+                          disabled={ephemeralFolder.tracks.length === 0}
+                          title={$t('library.ephemeralFolder.playAll')}
+                        >
+                          <Play size={14} />
+                          <span>{$t('library.ephemeralFolder.playAll')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          class="ephemeral-close-btn"
+                          onclick={closeEphemeralFolder}
+                          title={$t('library.ephemeralFolder.close')}
+                          aria-label={$t('library.ephemeralFolder.close')}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    {#if ephemeralFolder.tracks.length === 0}
+                      <div class="ephemeral-empty">
+                        {$t('library.ephemeralFolder.empty')}
+                      </div>
+                    {:else}
+                      <div class="ephemeral-track-list">
+                        {#each ephemeralFolder.tracks as track (track.id)}
+                          <button
+                            type="button"
+                            class="ephemeral-track-row"
+                            class:active={activeTrackId === track.id}
+                            onclick={() => playEphemeralTrack(track)}
+                          >
+                            <span class="ephemeral-track-num">
+                              {track.disc_number && track.disc_number > 1
+                                ? `${track.disc_number}.${track.track_number ?? '—'}`
+                                : track.track_number ?? '—'}
+                            </span>
+                            <span class="ephemeral-track-meta">
+                              <span class="ephemeral-track-title">{formatTrackTitle(track)}</span>
+                              <span class="ephemeral-track-secondary">
+                                {track.artist}{#if track.album} · {track.album}{/if}
+                              </span>
+                            </span>
+                            <span class="ephemeral-track-quality">{getQualityBadge(track)}</span>
+                            <span class="ephemeral-track-duration">{formatDuration(track.duration_secs)}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {:else if selectedAlbumForTree}
                   <!-- Compact album view: artwork + metadata + play +
                        track list, sized for the right pane so the tree
                        rail stays visible. The full-page album-detail
@@ -8370,12 +8598,13 @@
 
   /* Dedicated tree-mode search input. Decoupled from the global
      `albumSearch` input — driving its own filter via `treeSearchInput`
-     in the script. Pinned to a moderate fixed width (~140px) so the
-     toolbar items stay left-aligned and the search input doesn't
-     stretch across the whole column. */
+     in the script. Pinned to a moderate fixed width (~140px) and
+     pushed to the right edge of the toolbar via `margin-left: auto`
+     so the action icons stay anchored on the left. */
   .tree-search-input {
     flex: 0 0 auto;
     width: 140px;
+    margin-left: auto;
     padding: 4px 8px;
     border: 1px solid var(--border-color);
     border-radius: 3px;
@@ -8390,9 +8619,9 @@
 
   .folder-tree-column {
     /* Width is set inline via style:width — see folderTreeSidebarWidth in
-       LocalLibraryView.svelte. The 302px fallback only kicks in if the
+       LocalLibraryView.svelte. The 290px fallback only kicks in if the
        inline style fails to attach (defensive). */
-    width: 302px;
+    width: 290px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -8496,6 +8725,197 @@
     font-size: 14px;
     padding: 24px;
     text-align: center;
+  }
+
+  /* Ephemeral folder pane: full content area showing the contents of an
+     ad-hoc folder the user opened without persisting to the library. The
+     header carries a Play All affordance and a close button; below it a
+     simple track list (no virtualization needed — ephemeral sessions are
+     bounded to one folder at a time and rarely exceed a few hundred
+     rows). Visually marked as transient via the "Session" eyebrow color
+     so it doesn't read as part of the persistent library. */
+  .ephemeral-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 16px 0 0 0;
+  }
+
+  .ephemeral-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 4px 12px 4px;
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .ephemeral-header-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .ephemeral-titles {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ephemeral-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ephemeral-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ephemeral-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .ephemeral-play-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 14px;
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 120ms ease;
+  }
+
+  .ephemeral-play-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .ephemeral-play-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ephemeral-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .ephemeral-close-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .ephemeral-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 24px;
+  }
+
+  .ephemeral-track-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+
+  .ephemeral-track-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 8px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 100ms ease;
+  }
+
+  .ephemeral-track-row:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .ephemeral-track-row.active {
+    color: var(--accent-primary);
+  }
+
+  .ephemeral-track-num {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .ephemeral-track-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .ephemeral-track-title {
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ephemeral-track-secondary {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ephemeral-track-quality {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ephemeral-track-duration {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 40px;
+    text-align: right;
   }
 
   /* Inline Flat / Tree toggle in the jumpnav row.

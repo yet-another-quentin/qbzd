@@ -915,6 +915,21 @@
       "listView": "Lista",
       "viewArtwork": "Ver capa do álbum"
     },
+    "ephemeralFolder": {
+      "buttonLabel": "Abrir pasta",
+      "tooltip": "Abre uma pasta de forma pontual — suas faixas são carregadas no painel e permanecem disponíveis até o app fechar. Nada é adicionado à sua biblioteca.",
+      "dialogTitle": "Selecione uma pasta para reproduzir",
+      "contextLabel": "Pasta aberta",
+      "subtitle": "{count, plural, one {# faixa} other {# faixas}} · {path}",
+      "playAll": "Reproduzir tudo",
+      "close": "Fechar pasta",
+      "empty": "Nenhum arquivo de áudio compatível encontrado nesta pasta.",
+      "opened": "{count, plural, one {# faixa} other {# faixas}} carregada(s)",
+      "openedWithSkips": "{count, plural, one {# faixa} other {# faixas}} carregada(s), {skipped, plural, one {# arquivo} other {# arquivos}} ignorado(s)",
+      "openFailed": "Não foi possível abrir a pasta: {error}",
+      "playFailed": "Falha na reprodução: {error}",
+      "gone": "A pasta não está mais disponível — sessão encerrada."
+    },
     "folderListTitle": "Pastas da Biblioteca",
     "editTabs": {
       "title": "Editar abas da Library",

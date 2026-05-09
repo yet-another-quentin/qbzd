@@ -915,6 +915,21 @@
       "listView": "Liste",
       "viewArtwork": "Albumcover ansehen"
     },
+    "ephemeralFolder": {
+      "buttonLabel": "Ordner öffnen",
+      "tooltip": "Öffnet einen Ordner ad-hoc — die Titel erscheinen im Inhaltsbereich und bleiben verfügbar, bis die App geschlossen wird. Es wird nichts zur Bibliothek hinzugefügt.",
+      "dialogTitle": "Ordner zum Abspielen auswählen",
+      "contextLabel": "Geöffneter Ordner",
+      "subtitle": "{count, plural, one {# Titel} other {# Titel}} · {path}",
+      "playAll": "Alle abspielen",
+      "close": "Ordner schließen",
+      "empty": "Keine unterstützten Audiodateien in diesem Ordner gefunden.",
+      "opened": "{count, plural, one {# Titel} other {# Titel}} geöffnet",
+      "openedWithSkips": "{count, plural, one {# Titel} other {# Titel}} geöffnet, {skipped, plural, one {# Datei} other {# Dateien}} übersprungen",
+      "openFailed": "Ordner konnte nicht geöffnet werden: {error}",
+      "playFailed": "Wiedergabe fehlgeschlagen: {error}",
+      "gone": "Ordner nicht mehr verfügbar — Sitzung beendet."
+    },
     "folderListTitle": "Bibliotheksordner",
     "editTabs": {
       "title": "Library-Tabs bearbeiten",

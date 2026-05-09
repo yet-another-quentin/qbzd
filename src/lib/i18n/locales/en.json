@@ -915,6 +915,21 @@
       "listView": "List",
       "viewArtwork": "View album art"
     },
+    "ephemeralFolder": {
+      "buttonLabel": "Open Folder",
+      "tooltip": "Open a folder ad-hoc — its tracks load into the content pane and remain available until the app closes. Nothing is added to your library.",
+      "dialogTitle": "Choose a folder to play",
+      "contextLabel": "Open Folder",
+      "subtitle": "{count, plural, one {# track} other {# tracks}} · {path}",
+      "playAll": "Play all",
+      "close": "Close folder",
+      "empty": "No supported audio files found in this folder.",
+      "opened": "Opened {count, plural, one {# track} other {# tracks}}",
+      "openedWithSkips": "Opened {count, plural, one {# track} other {# tracks}}, skipped {skipped, plural, one {# file} other {# files}}",
+      "openFailed": "Could not open folder: {error}",
+      "playFailed": "Playback failed: {error}",
+      "gone": "Folder is no longer available — session cleared."
+    },
     "explicit": "Explicit",
     "folderListTitle": "Library Folders",
     "editTabs": {

@@ -826,6 +826,7 @@ pub async fn v2_library_get_tracks_by_ids(
 pub async fn v2_library_play_track(
     track_id: i64,
     library_state: State<'_, LibraryState>,
+    ephemeral_state: State<'_, crate::ephemeral_library::EphemeralLibraryState>,
     bridge: State<'_, CoreBridgeState>,
     offline_cache: State<'_, crate::offline_cache::OfflineCacheState>,
     app_state: State<'_, AppState>,
@@ -837,6 +838,29 @@ pub async fn v2_library_play_track(
         .check_requirements(CommandRequirement::RequiresUserSession)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Negative ids belong to the ephemeral library (an ad-hoc folder the
+    // user opened without persisting it to local_tracks). Resolve to the
+    // in-memory cache and skip every DB-bound branch below — ephemeral
+    // tracks are never qobuz_download, never offline-cached, never have a
+    // CUE pointer. Just read the file and hand it to the player.
+    if track_id < 0 {
+        let track = ephemeral_state
+            .get_track(track_id)
+            .ok_or_else(|| format!("Ephemeral track {} not found (session may have been cleared)", track_id))?;
+        let file_path = std::path::Path::new(&track.file_path);
+        if !file_path.exists() {
+            return Err(format!("Ephemeral file not found: {}", track.file_path));
+        }
+        let audio_data =
+            std::fs::read(file_path).map_err(|e| format!("Failed to read ephemeral file: {}", e))?;
+        let bridge = bridge.get().await;
+        bridge
+            .player()
+            .play_data(audio_data, track_id as u64)
+            .map_err(|e| format!("Failed to play ephemeral track: {}", e))?;
+        return Ok(());
+    }
 
     let track = {
         let guard = library_state.db.lock().await;

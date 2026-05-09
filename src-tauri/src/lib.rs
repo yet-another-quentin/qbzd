@@ -39,6 +39,7 @@ pub mod config;
 pub mod credentials;
 pub mod discogs;
 pub mod discord_rpc;
+pub mod ephemeral_library;
 pub mod flatpak;
 #[cfg(target_os = "linux")]
 pub mod idle_inhibit;
@@ -1468,6 +1469,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             }
         })
         .manage(library_state)
+        .manage(ephemeral_library::EphemeralLibraryState::new())
         .manage(cast_state)
         .manage(dlna_state)
         .manage(offline_cache_state)
@@ -1674,6 +1676,9 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_library_get_scan_progress,
             commands_v2::v2_library_get_tracks_by_ids,
             commands_v2::v2_library_play_track,
+            commands_v2::v2_ephemeral_open_folder,
+            commands_v2::v2_ephemeral_clear,
+            commands_v2::v2_ephemeral_get_track,
             commands_v2::v2_playlist_set_sort,
             commands_v2::v2_playlist_set_artwork,
             commands_v2::v2_playlist_get_all_settings,

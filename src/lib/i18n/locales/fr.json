@@ -915,6 +915,21 @@
       "listView": "Liste",
       "viewArtwork": "Voir la pochette de l'album"
     },
+    "ephemeralFolder": {
+      "buttonLabel": "Ouvrir un dossier",
+      "tooltip": "Ouvre un dossier de manière ponctuelle — ses pistes sont chargées dans le panneau et restent disponibles jusqu'à la fermeture de l'application. Rien n'est ajouté à votre bibliothèque.",
+      "dialogTitle": "Sélectionne un dossier à lire",
+      "contextLabel": "Dossier ouvert",
+      "subtitle": "{count, plural, one {# piste} other {# pistes}} · {path}",
+      "playAll": "Tout lire",
+      "close": "Fermer le dossier",
+      "empty": "Aucun fichier audio pris en charge n'a été trouvé dans ce dossier.",
+      "opened": "{count, plural, one {# piste} other {# pistes}} chargée(s)",
+      "openedWithSkips": "{count, plural, one {# piste} other {# pistes}} chargée(s), {skipped, plural, one {# fichier} other {# fichiers}} ignoré(s)",
+      "openFailed": "Impossible d'ouvrir le dossier : {error}",
+      "playFailed": "Échec de la lecture : {error}",
+      "gone": "Le dossier n'est plus disponible — session fermée."
+    },
     "folderListTitle": "Dossiers de la bibliothèque",
     "editTabs": {
       "title": "Modifier les onglets Library",

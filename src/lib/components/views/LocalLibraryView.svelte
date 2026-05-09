@@ -5,6 +5,7 @@
   import { getThumbnailUrl, getCachedThumbnailUrl } from '$lib/services/thumbnailService';
   import { open, ask } from '@tauri-apps/plugin-dialog';
   import { onMount, onDestroy, tick, untrack } from 'svelte';
+  import { fade } from 'svelte/transition';
   import {
     HardDrive, Music, Disc3, MicVocal, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, CircleAlert, ImageDown, Upload, Search, LayoutGrid, List, ListOrdered, PenLine,
@@ -5126,59 +5127,14 @@
             </button>
           {/each}
         </div>
-      </div>
-      <div class="page-search" class:open={searchOpen}>
-        {#if searchOpen}
-          <div class="search-input-container">
-            <input
-              type="text"
-              class="search-input-sticky"
-              placeholder={getCurrentSearchPlaceholder()}
-              value={getCurrentSearchValue()}
-              bind:this={searchInputEl}
-              oninput={handleSearchInput}
-              onkeydown={(e) => {
-                if (e.key === 'Escape') toggleSearch();
-              }}
-            />
-            <div class="search-controls">
-              <button class="search-close-btn" onclick={toggleSearch} title="Close search">
-                <X size={16} />
-              </button>
-            </div>
-          </div>
-        {:else}
-          <button class="search-toggle" onclick={toggleSearch} title={ $t('search.title') }>
-            <Search size={18} />
-          </button>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Content -->
-    <div class="content">
-      {#if loading}
-        <div class="loading">
-          <div class="spinner"></div>
-          <p>{$t('library.loadingLibrary')}</p>
-        </div>
-      {:else if error}
-        <div class="error">
-          <CircleAlert size={48} />
-          <p>{$t('library.failedLoadLibrary')}</p>
-          <p class="error-detail">{error}</p>
-          <button class="retry-btn" onclick={() => loadLibraryData()}>{$t('actions.retry')}</button>
-        </div>
-      {:else if activeTab === 'folders'}
-        {#key activeTab}
-        <ViewTransition duration={200} distance={12} direction="up">
-        <!-- Folders view-mode toggle: Flat (legacy folder-grouped list) vs
-             Tree (filesystem hierarchy, two-column layout). The Hidden
-             Albums sub-view bypasses the toggle: when the user is browsing
-             hidden albums we render the flat list regardless of the
-             toggle's current value. -->
-        {#if !showHiddenAlbums}
-          <div class="folders-mode-segmented">
+        {#if activeTab === 'folders' && !showHiddenAlbums}
+          <!-- Inline Flat/Tree toggle: appears only on the Folders tab and
+               sits to the right of the tab list. Lower visual weight than
+               the tabs (no border, smaller font, transparent ghost style)
+               so it reads as a secondary affordance, not a competing nav
+               element. Conditional render + 120ms fade keeps the entry
+               subtle. Other tabs do not see it at all. -->
+          <div class="folders-mode-inline-toggle" transition:fade={{ duration: 120 }}>
             <button
               type="button"
               class="folders-mode-btn"
@@ -5199,6 +5155,61 @@
             </button>
           </div>
         {/if}
+      </div>
+      {#if activeTab !== 'folders'}
+        <!-- Page-level search icon hides on the Folders tab. Flat mode
+             previously relied on this toggle for `albumSearch`; tree mode
+             will gain a dedicated tree-search input in a follow-up. -->
+        <div class="page-search" class:open={searchOpen}>
+          {#if searchOpen}
+            <div class="search-input-container">
+              <input
+                type="text"
+                class="search-input-sticky"
+                placeholder={getCurrentSearchPlaceholder()}
+                value={getCurrentSearchValue()}
+                bind:this={searchInputEl}
+                oninput={handleSearchInput}
+                onkeydown={(e) => {
+                  if (e.key === 'Escape') toggleSearch();
+                }}
+              />
+              <div class="search-controls">
+                <button class="search-close-btn" onclick={toggleSearch} title="Close search">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          {:else}
+            <button class="search-toggle" onclick={toggleSearch} title={ $t('search.title') }>
+              <Search size={18} />
+            </button>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      {#if loading}
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>{$t('library.loadingLibrary')}</p>
+        </div>
+      {:else if error}
+        <div class="error">
+          <CircleAlert size={48} />
+          <p>{$t('library.failedLoadLibrary')}</p>
+          <p class="error-detail">{error}</p>
+          <button class="retry-btn" onclick={() => loadLibraryData()}>{$t('actions.retry')}</button>
+        </div>
+      {:else if activeTab === 'folders'}
+        {#key activeTab}
+        <ViewTransition duration={200} distance={12} direction="up">
+        <!-- Folders view-mode toggle (Flat / Tree) lives inline with the
+             jumpnav above. The Hidden Albums sub-view still bypasses the
+             toggle and renders the flat hidden-album list regardless of
+             the current `foldersViewMode`. -->
         {#if foldersViewMode === 'tree' && !showHiddenAlbums}
           <!-- Tree mode: two-column shell mirroring the Artists tab CSS
                byte-for-byte. Left rail renders registered scan roots as
@@ -5207,20 +5218,24 @@
                folder matches an album_group_key), the new FolderDetail
                component (otherwise), or an empty-state hint. -->
           <div class="folders-tree-container">
-            <div class="folders-tree-controls">
-              <button
-                type="button"
-                class="control-btn icon-only"
-                class:active={treeSelectMode}
-                onclick={toggleTreeSelectMode}
-                title={treeSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
-                aria-pressed={treeSelectMode}
-              >
-                <SquareCheckBig size={16} />
-              </button>
-            </div>
             <div class="folders-tree-two-column-layout" bind:this={folderTreeLayoutEl}>
               <div class="folder-tree-column" style:width="{folderTreeSidebarWidth}px">
+                <!-- Select-mode toggle now lives at the top of the tree
+                     column itself (was previously above the two-column
+                     layout). This lets the column divider start right
+                     below the jumpnav row, almost touching it. -->
+                <div class="folder-tree-column-toolbar">
+                  <button
+                    type="button"
+                    class="control-btn icon-only"
+                    class:active={treeSelectMode}
+                    onclick={toggleTreeSelectMode}
+                    title={treeSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+                    aria-pressed={treeSelectMode}
+                  >
+                    <SquareCheckBig size={16} />
+                  </button>
+                </div>
                 <div class="folder-tree-scroll">
                   {#if treeScanRoots.length === 0}
                     <div class="folders-tree-empty-state">
@@ -6469,6 +6484,11 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
+    /* Claim the available row width so the inline Folders Flat/Tree
+       toggle can right-align via `margin-left: auto`. Doesn't disturb
+       layout on other tabs (the tabs anchor at the left as before). */
+    flex: 1;
+    min-width: 0;
   }
 
   .jump-links {
@@ -8038,20 +8058,18 @@
   /* ─── Folders tab tree-mode (Task 7) ───
      Mirrors the Artists tab two-column layout byte-for-byte. The shell
      unmounts when foldersViewMode === 'flat', so the existing flat
-     folder-grouped list keeps full width. */
+     folder-grouped list keeps full width.
+
+     The select-mode toolbar previously rendered as `.folders-tree-controls`
+     above the two-column layout; it now lives inside the tree column
+     (`.folder-tree-column-toolbar`) so the column divider starts right
+     below the jumpnav. The container height grew accordingly (was
+     `calc(100vh - 320px)`). */
   .folders-tree-container {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 320px);
+    height: calc(100vh - 280px);
     min-height: 400px;
-  }
-
-  .folders-tree-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 0 8px 0;
-    flex-shrink: 0;
   }
 
   .folders-tree-two-column-layout {
@@ -8061,6 +8079,18 @@
     min-height: 0;
     margin: 0 -24px 0 -18px;
     padding: 0;
+  }
+
+  /* Toolbar at the top of the tree column hosting the select-mode
+     button. Sits inside `.folder-tree-column` so the column divider
+     visually starts at the very top of the two-column layout (almost
+     touching the jumpnav row). */
+  .folder-tree-column-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px 8px 0;
+    flex-shrink: 0;
   }
 
   .folder-tree-column {
@@ -8173,36 +8203,41 @@
     text-align: center;
   }
 
-  /* Segmented control on the Folders toolbar — Flat / Tree. Visual style
-     matches the existing dropdown control buttons in the same toolbar
-     (`.control-btn`). Sits above the flat list / tree shell. */
-  .folders-mode-segmented {
+  /* Inline Flat / Tree toggle in the jumpnav row.
+     Frontend-design intent: the toggle must NOT compete with the tab
+     list for visual weight. So it sits right of the tabs (separated by
+     a flex spacer via `margin-left: auto`), uses a smaller font, and
+     adopts a flat ghost-pill style: only the active option carries a
+     subtle background. No autofocus on entry — Tab order remains
+     tabs → toggle → page actions. */
+  .folders-mode-inline-toggle {
+    margin-left: auto;
     display: inline-flex;
     align-items: center;
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 6px;
-    overflow: hidden;
-    margin-bottom: 12px;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 4px;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.04));
   }
 
   .folders-mode-btn {
-    padding: 6px 14px;
-    background: transparent;
-    color: var(--text-muted);
+    padding: 4px 10px;
     border: none;
-    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary, var(--text-muted));
     font-family: inherit;
-    font-size: 13px;
-    transition: background 100ms ease, color 100ms ease;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  .folders-mode-btn:hover {
+    color: var(--text-primary);
   }
 
   .folders-mode-btn.active {
-    background: var(--accent-primary);
-    color: var(--btn-primary-text, white);
-  }
-
-  .folders-mode-btn:hover:not(.active) {
-    background: var(--bg-hover);
+    background: var(--bg-secondary, rgba(255, 255, 255, 0.08));
     color: var(--text-primary);
   }
 </style>

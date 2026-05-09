@@ -600,10 +600,10 @@
       ephemeralFolder = result;
       if (result.tracks.length === 0) {
         showToast($t('library.ephemeralFolder.empty'), 'info');
-      } else if (result.skippedFiles > 0) {
+      } else if (result.skipped_files > 0) {
         showToast(
           $t('library.ephemeralFolder.openedWithSkips', {
-            values: { count: result.tracks.length, skipped: result.skippedFiles }
+            values: { count: result.tracks.length, skipped: result.skipped_files }
           }),
           'success'
         );
@@ -1009,18 +1009,20 @@
   // tracks here have synthetic negative ids that route to the in-memory
   // EphemeralLibraryState on the backend (see v2_library_play_track). The
   // session vanishes on app exit (no DB persistence).
+  // Field names are snake_case to match the Rust struct serde-serializes
+  // (consistent with LocalTrack, which is also snake_case across the FFI).
   type EphemeralFolderState = {
-    folderPath: string;
+    folder_path: string;
     tracks: LocalTrack[];
-    skippedFiles: number;
+    skipped_files: number;
   };
   let ephemeralFolder = $state<EphemeralFolderState | null>(null);
   let openingEphemeralFolder = $state(false);
 
   const ephemeralFolderName = $derived.by(() => {
     if (!ephemeralFolder) return '';
-    const segments = ephemeralFolder.folderPath.split('/').filter(Boolean);
-    return segments.length > 0 ? segments[segments.length - 1] : ephemeralFolder.folderPath;
+    const segments = ephemeralFolder.folder_path.split('/').filter(Boolean);
+    return segments.length > 0 ? segments[segments.length - 1] : ephemeralFolder.folder_path;
   });
   // Set of paths the user has expanded in the tree. Each top-level
   // <LocalLibraryFolderTree> shares this set so siblings stay in sync.
@@ -5707,7 +5709,7 @@
                             {$t('library.ephemeralFolder.subtitle', {
                               values: {
                                 count: ephemeralFolder.tracks.length,
-                                path: ephemeralFolder.folderPath
+                                path: ephemeralFolder.folder_path
                               }
                             })}
                           </div>

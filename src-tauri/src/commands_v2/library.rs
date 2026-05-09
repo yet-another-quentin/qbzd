@@ -839,12 +839,15 @@ pub async fn v2_library_play_track(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Negative ids belong to the ephemeral library (an ad-hoc folder the
-    // user opened without persisting it to local_tracks). Resolve to the
-    // in-memory cache and skip every DB-bound branch below — ephemeral
-    // tracks are never qobuz_download, never offline-cached, never have a
-    // CUE pointer. Just read the file and hand it to the player.
-    if track_id < 0 {
+    // Track ids at or above EPHEMERAL_ID_FLOOR belong to the ephemeral
+    // library (an ad-hoc folder the user opened without persisting it
+    // to local_tracks). Resolve to the in-memory cache and skip every
+    // DB-bound branch below — ephemeral tracks are never qobuz_download,
+    // never offline-cached, never have a CUE pointer. Just read the
+    // file and hand it to the player. The high-positive id range keeps
+    // the existing u64-typed queue/context commands happy while still
+    // being unambiguous (DB autoincrement ids never reach 2^48).
+    if track_id >= crate::ephemeral_library::EPHEMERAL_ID_FLOOR {
         let track = ephemeral_state
             .get_track(track_id)
             .ok_or_else(|| format!("Ephemeral track {} not found (session may have been cleared)", track_id))?;

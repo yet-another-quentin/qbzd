@@ -827,6 +827,19 @@
   let artistImageFetchAborted = false; // Flag to abort fetching
   let trackSearch = $state('');
   let tracksHydrationRequestId = 0;
+  // Viewport-driven Plex quality hydration (Tracks tab).
+  // The Tracks tab can hold 16K+ rows; hydrating every Plex track up front
+  // floods the Plex server and freezes the app. Instead we hydrate only the
+  // rows currently visible in the virtualized list, and merge the result
+  // into a reactive override map that the renderer consults — avoiding a
+  // full-array reassignment of `tracks` (which would trigger a second pass
+  // through the grouping/sort pipeline on every hydration completion).
+  type PlexQualityOverride = { format?: string; bitDepth?: number; sampleRate?: number };
+  const plexQualityOverrides = new SvelteMap<string, PlexQualityOverride>();
+  const queuedPlexHydration = new Set<string>();
+  let pendingPlexHydration: LocalTrack[] = [];
+  let plexHydrationDebounce: ReturnType<typeof setTimeout> | null = null;
+  const PLEX_VISIBLE_HYDRATION_DEBOUNCE_MS = 150;
   let searchOpen = $state(false);
   let searchInputEl = $state<HTMLInputElement | undefined>(undefined);
   type TrackGroupMode = 'album' | 'artist' | 'name';
@@ -2867,7 +2880,19 @@
 
   async function loadTracks(query = '') {
     console.log('[LocalLibrary] loadTracks START, query:', query);
-    const requestId = ++tracksHydrationRequestId;
+    // Bumping the request id invalidates any in-flight viewport hydration
+    // batches keyed off the previous query. The actual hydration happens
+    // viewport-driven via onVisibleTracksChange — we no longer front-load
+    // the full Plex catalog, which used to flood the server and trigger a
+    // second reactive pass through groupTracks on every completion.
+    ++tracksHydrationRequestId;
+    queuedPlexHydration.clear();
+    pendingPlexHydration = [];
+    if (plexHydrationDebounce) {
+      clearTimeout(plexHydrationDebounce);
+      plexHydrationDebounce = null;
+    }
+    plexQualityOverrides.clear();
     loading = true;
     try {
       console.log('[LocalLibrary] Calling library_search + plex_cache_search_tracks');
@@ -2887,23 +2912,74 @@
       const mappedPlexTracks = plexTracksRaw.map(mapPlexTrack);
       tracks = [...localTracks, ...mappedPlexTracks];
       console.log('[LocalLibrary] Received tracks:', tracks.length, 'local:', localTracks.length, 'plex:', plexTracksRaw.length);
-
-      // Hydrate Plex quality in the background; don't block rendering track lists.
-      // Guard with requestId to avoid stale updates after a newer search.
-      void hydratePlexTrackQuality(mappedPlexTracks)
-        .then((hydratedPlexTracks) => {
-          if (requestId !== tracksHydrationRequestId) return;
-          tracks = [...localTracks, ...hydratedPlexTracks];
-        })
-        .catch((error) => {
-          console.warn('[LocalLibrary] Background Plex quality hydration failed:', error);
-        });
     } catch (err) {
       console.error('[LocalLibrary] Failed to load tracks:', err);
       error = String(err);
     } finally {
       console.log('[LocalLibrary] loadTracks COMPLETE');
       loading = false;
+    }
+  }
+
+  function onVisibleTracksChange(visible: LocalTrack[]) {
+    if (visible.length === 0) return;
+    let queuedAny = false;
+    for (const track of visible) {
+      if (track.source !== 'plex') continue;
+      if (plexQualityOverrides.has(track.file_path)) continue;
+      if (queuedPlexHydration.has(track.file_path)) continue;
+      if (!isLikelyFallbackPlexQuality(track)) continue;
+      queuedPlexHydration.add(track.file_path);
+      pendingPlexHydration.push(track);
+      queuedAny = true;
+    }
+    if (!queuedAny || plexHydrationDebounce) return;
+    const requestId = tracksHydrationRequestId;
+    plexHydrationDebounce = setTimeout(() => {
+      plexHydrationDebounce = null;
+      if (requestId !== tracksHydrationRequestId) return;
+      const batch = pendingPlexHydration;
+      pendingPlexHydration = [];
+      void hydrateVisiblePlexTracks(batch, requestId);
+    }, PLEX_VISIBLE_HYDRATION_DEBOUNCE_MS);
+  }
+
+  async function hydrateVisiblePlexTracks(batch: LocalTrack[], requestId: number) {
+    const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
+    const token = getUserItem('qbz-plex-poc-token') || '';
+    if (!baseUrl || !token || batch.length === 0) return;
+
+    const updates: PlexTrackQualityUpdate[] = [];
+    for (let i = 0; i < batch.length; i += PLEX_HYDRATION_BATCH_SIZE) {
+      if (requestId !== tracksHydrationRequestId) return;
+      const chunk = batch.slice(i, i + PLEX_HYDRATION_BATCH_SIZE);
+      await Promise.all(
+        chunk.map(async (track) => {
+          const metadata = await fetchPlexTrackMetadataWithTimeout(baseUrl, token, track.file_path);
+          if (!metadata) {
+            // Allow a future retry if the row stays visible.
+            queuedPlexHydration.delete(track.file_path);
+            return;
+          }
+          plexQualityOverrides.set(track.file_path, {
+            format: (metadata.container ?? metadata.codec ?? '').toLowerCase() || undefined,
+            bitDepth: metadata.bitDepth ?? undefined,
+            sampleRate: metadata.samplingRateHz ?? undefined
+          });
+          updates.push({
+            ratingKey: track.file_path,
+            container: metadata.container ?? metadata.codec,
+            samplingRateHz: metadata.samplingRateHz,
+            bitDepth: metadata.bitDepth
+          });
+        })
+      );
+    }
+
+    if (updates.length > 0) {
+      invoke<number>('v2_plex_cache_update_track_quality', { updates }).catch((error) => {
+        console.warn('[LocalLibrary] Failed to persist Plex track quality updates:', error);
+      });
     }
   }
 
@@ -3430,6 +3506,26 @@
     return format === 'flac' && bitDepth <= 16 && sampleRate <= 44100;
   }
 
+  const PLEX_HYDRATION_BATCH_SIZE = 5;
+  const PLEX_HYDRATION_TIMEOUT_MS = 5000;
+
+  async function fetchPlexTrackMetadataWithTimeout(
+    baseUrl: string,
+    token: string,
+    ratingKey: string
+  ): Promise<PlexTrackMetadata | null> {
+    try {
+      return await Promise.race<PlexTrackMetadata>([
+        invoke<PlexTrackMetadata>('v2_plex_get_track_metadata', { baseUrl, token, ratingKey }),
+        new Promise<PlexTrackMetadata>((_, reject) =>
+          setTimeout(() => reject(new Error('plex_hydration_timeout')), PLEX_HYDRATION_TIMEOUT_MS)
+        )
+      ]);
+    } catch {
+      return null;
+    }
+  }
+
   async function hydratePlexTrackQuality(tracks: LocalTrack[]): Promise<LocalTrack[]> {
     const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
     const token = getUserItem('qbz-plex-poc-token') || '';
@@ -3438,33 +3534,27 @@
     const candidates = tracks.filter((track) => isLikelyFallbackPlexQuality(track));
     if (candidates.length === 0) return tracks;
 
-    const metadataEntries = await Promise.all(
-      candidates.map(async (track) => {
-        try {
-          const metadata = await invoke<PlexTrackMetadata>('v2_plex_get_track_metadata', {
-            baseUrl,
-            token,
-            ratingKey: track.file_path
-          });
-          return [track.file_path, metadata] as const;
-        } catch (error) {
-          console.warn('[LocalLibrary] Failed to hydrate Plex track metadata for', track.file_path, error);
-          return null;
-        }
-      })
-    );
-
     const metadataByRatingKey = new Map<string, PlexTrackMetadata>();
     const qualityUpdates: PlexTrackQualityUpdate[] = [];
-    for (const entry of metadataEntries) {
-      if (!entry) continue;
-      metadataByRatingKey.set(entry[0], entry[1]);
-      qualityUpdates.push({
-        ratingKey: entry[0],
-        container: entry[1].container ?? entry[1].codec,
-        samplingRateHz: entry[1].samplingRateHz,
-        bitDepth: entry[1].bitDepth
-      });
+
+    for (let i = 0; i < candidates.length; i += PLEX_HYDRATION_BATCH_SIZE) {
+      const batch = candidates.slice(i, i + PLEX_HYDRATION_BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map(async (track) => {
+          const metadata = await fetchPlexTrackMetadataWithTimeout(baseUrl, token, track.file_path);
+          return metadata ? ({ ratingKey: track.file_path, metadata } as const) : null;
+        })
+      );
+      for (const entry of results) {
+        if (!entry) continue;
+        metadataByRatingKey.set(entry.ratingKey, entry.metadata);
+        qualityUpdates.push({
+          ratingKey: entry.ratingKey,
+          container: entry.metadata.container ?? entry.metadata.codec,
+          samplingRateHz: entry.metadata.samplingRateHz,
+          bitDepth: entry.metadata.bitDepth
+        });
+      }
     }
     if (metadataByRatingKey.size === 0) return tracks;
 
@@ -3841,10 +3931,21 @@
   }
 
   function getQualityBadge(track: LocalTrack): string {
-    const format = track.format.toUpperCase();
-    const bitDepth = track.bit_depth && track.bit_depth > 0 ? String(track.bit_depth) : '--';
-    const sampleRate = track.sample_rate > 0
-      ? Number((track.sample_rate / 1000).toFixed(1)).toString()
+    let rawFormat = track.format;
+    let bitDepthRaw = track.bit_depth;
+    let sampleRateRaw = track.sample_rate;
+    if (track.source === 'plex') {
+      const override = plexQualityOverrides.get(track.file_path);
+      if (override) {
+        if (override.format) rawFormat = override.format;
+        if (override.bitDepth != null) bitDepthRaw = override.bitDepth;
+        if (override.sampleRate != null) sampleRateRaw = override.sampleRate;
+      }
+    }
+    const format = rawFormat.toUpperCase();
+    const bitDepth = bitDepthRaw && bitDepthRaw > 0 ? String(bitDepthRaw) : '--';
+    const sampleRate = sampleRateRaw > 0
+      ? Number((sampleRateRaw / 1000).toFixed(1)).toString()
       : '--';
 
     // Format: "FLAC 24/96" style that audiophiles love
@@ -4451,38 +4552,40 @@
 
   function groupTracks(items: LocalTrack[], mode: TrackGroupMode) {
     const prefix = `track-${mode}`;
-    const sorted = [...items].sort((a, b) => {
+    // Decorate-sort-undecorate: precompute one composite key per track and
+    // sort by string compare. localeCompare creates an Intl.Collator on
+    // every call, which costs seconds across 16K-66K rows; padded-numeric
+    // ASCII keys with `<`/`>` are 10-100× faster and good enough for
+    // library browsing.
+    const SEP = '';
+    const padDisc = (d: number) => String(d).padStart(4, '0');
+    const padTrack = (n: number) => String(n).padStart(6, '0');
+    const decorated = items.map((track) => {
+      let key: string;
       if (mode === 'album') {
-        const albumCmp = a.album.localeCompare(b.album);
-        if (albumCmp !== 0) return albumCmp;
-        const artistCmp = a.artist.localeCompare(b.artist);
-        if (artistCmp !== 0) return artistCmp;
-        const aOrder = trackSortValue(a);
-        const bOrder = trackSortValue(b);
-        if (aOrder.disc !== bOrder.disc) return aOrder.disc - bOrder.disc;
-        if (aOrder.trackNumber !== bOrder.trackNumber) return aOrder.trackNumber - bOrder.trackNumber;
-        return a.title.localeCompare(b.title);
+        const order = trackSortValue(track);
+        key = (track.album || '').toLowerCase() + SEP +
+              (track.artist || '').toLowerCase() + SEP +
+              padDisc(order.disc) + SEP +
+              padTrack(order.trackNumber) + SEP +
+              (track.title || '').toLowerCase();
+      } else if (mode === 'artist') {
+        const canonical = (allCanonicalNames.get(track.artist) || track.artist || '').toLowerCase();
+        const order = trackSortValue(track);
+        key = canonical + SEP +
+              (track.album || '').toLowerCase() + SEP +
+              padDisc(order.disc) + SEP +
+              padTrack(order.trackNumber) + SEP +
+              (track.title || '').toLowerCase();
+      } else {
+        key = (track.title || '').toLowerCase() + SEP +
+              (track.artist || '').toLowerCase() + SEP +
+              (track.album || '').toLowerCase();
       }
-      if (mode === 'artist') {
-        // Use canonical names for sorting to keep variants together
-        const aArtist = allCanonicalNames.get(a.artist) || a.artist;
-        const bArtist = allCanonicalNames.get(b.artist) || b.artist;
-        const artistCmp = aArtist.localeCompare(bArtist);
-        if (artistCmp !== 0) return artistCmp;
-        const albumCmp = a.album.localeCompare(b.album);
-        if (albumCmp !== 0) return albumCmp;
-        const aOrder = trackSortValue(a);
-        const bOrder = trackSortValue(b);
-        if (aOrder.disc !== bOrder.disc) return aOrder.disc - bOrder.disc;
-        if (aOrder.trackNumber !== bOrder.trackNumber) return aOrder.trackNumber - bOrder.trackNumber;
-        return a.title.localeCompare(b.title);
-      }
-      const titleCmp = a.title.localeCompare(b.title);
-      if (titleCmp !== 0) return titleCmp;
-      const artistCmp = a.artist.localeCompare(b.artist);
-      if (artistCmp !== 0) return artistCmp;
-      return a.album.localeCompare(b.album);
+      return { track, key };
     });
+    decorated.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    const sorted = decorated.map((d) => d.track);
 
     const groups = new Map<string, { title: string; subtitle?: string; tracks: LocalTrack[]; artists: Set<string> }>();
     for (const track of sorted) {
@@ -5411,7 +5514,13 @@
                 <!-- Drag handle anchored to the column's right edge.
                      Mouse drag is the primary affordance; arrow keys
                      (with Shift for big steps) and Home/End provide
-                     keyboard parity for accessibility. -->
+                     keyboard parity for accessibility.
+                     role="separator" with aria-orientation + aria-valuenow
+                     is the WAI-ARIA splitter pattern; Svelte's a11y linter
+                     doesn't recognize it as interactive, so silence the
+                     two rules that misfire here. -->
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                 <div
                   class="tree-sidebar-resize-handle"
                   class:resizing={isResizingTreeSidebar}
@@ -5894,6 +6003,7 @@
                 selectedIds={selectedTrackIds}
                 onToggleSelect={toggleTrackSelect}
                 onToggleSelectRange={addTracksToSelection}
+                onVisibleTracksChange={onVisibleTracksChange}
               />
             </div>
           </div>

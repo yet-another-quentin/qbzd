@@ -2267,10 +2267,20 @@ impl LibraryDatabase {
             format!("LIMIT {}", limit)
         };
 
+        // ORDER BY matches the album-grouped browsing the Tracks tab uses
+        // by default. Sorting in SQLite is sub-100ms for 100K rows; doing it
+        // in JS with localeCompare on the same volume blocks the main thread
+        // for several seconds per pass.
         let sql = format!(
             "SELECT {} FROM local_tracks \
              WHERE (title LIKE ?1 OR artist LIKE ?1 OR album LIKE ?1) \
-             {} {} {}",
+             {} {} \
+             ORDER BY album COLLATE NOCASE, \
+                      COALESCE(album_artist, artist) COLLATE NOCASE, \
+                      disc_number, \
+                      track_number, \
+                      title COLLATE NOCASE \
+             {}",
             Self::TRACK_COLUMNS,
             source_filter,
             network_filter,

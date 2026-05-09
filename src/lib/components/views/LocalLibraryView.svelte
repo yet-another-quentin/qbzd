@@ -19,6 +19,7 @@
   import {
     setCurrentTrack as setPlayerCurrentTrack,
     getCurrentTrack as getPlayerCurrentTrack,
+    patchCurrentTrackCueInfo,
   } from '$lib/stores/playerStore';
   import { syncQueueState } from '$lib/stores/queueStore';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -776,6 +777,31 @@
     await playEphemeralTrackWithQueue(track, queue);
   }
 
+  // Patch the player's currentTrack with CUE virtual-track boundaries
+  // every time the active track changes to an ephemeral row. The
+  // playback service builds PlayingTrack from BackendQueueTrack which
+  // doesn't carry cue_start_secs / cue_end_secs, so without this hook
+  // the seekbar would report absolute FLAC time (e.g. 7:26 from frame
+  // zero of a virtual track that lives at offset 446s) instead of
+  // virtual time. Non-CUE ephemeral and non-ephemeral tracks pass
+  // through harmlessly with `null` boundaries.
+  $effect(() => {
+    if (!ephemeralFolder) {
+      patchCurrentTrackCueInfo(null, null);
+      return;
+    }
+    if (activeTrackId == null || activeTrackId < EPHEMERAL_ID_FLOOR) {
+      patchCurrentTrackCueInfo(null, null);
+      return;
+    }
+    const ephemTrack = ephemeralFolder.tracks.find((item) => item.id === activeTrackId);
+    if (!ephemTrack) return;
+    patchCurrentTrackCueInfo(
+      ephemTrack.cue_start_secs ?? null,
+      ephemTrack.cue_end_secs ?? null
+    );
+  });
+
   // Spec rule: an ephemeral session "survives until a different album is
   // loaded, the Clear/Close button is pressed, or the directory/files are
   // gone". This effect handles the first trigger — anything that points
@@ -882,7 +908,11 @@
       duration: next.duration_secs,
       quality: getQualityBadge(next),
       bitDepth: next.bit_depth ?? undefined,
-      samplingRate: next.sample_rate ?? undefined,
+      // LocalTrack stores sample_rate in Hz; PlayingTrack expects kHz so
+      // the NowPlayingBar's "FLAC 16/44.1" badge formats correctly.
+      // Without /1000 the chrome reads as the raw 44100 number and
+      // looks like a quality downgrade vs. the badge in the album list.
+      samplingRate: next.sample_rate ? next.sample_rate / 1000 : undefined,
       isLocal: true,
       source: 'ephemeral',
     });

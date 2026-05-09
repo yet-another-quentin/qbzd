@@ -63,6 +63,15 @@ export interface PlayingTrack {
   originalBitDepth?: number;
   originalSamplingRate?: number;
   parental_warning?: boolean;
+  /** Start of this track inside the underlying audio file (CUE virtual
+   * tracks). When set, the seekbar subtracts it from event.position so
+   * the displayed elapsed/remaining are relative to the virtual track,
+   * not the entire FLAC. */
+  cueStartSecs?: number;
+  /** End of this track inside the underlying audio file. When set with
+   * cueStartSecs, drives the seekbar's max (= end - start) instead of
+   * the full file duration. */
+  cueEndSecs?: number;
 }
 
 interface BackendPlaybackState {
@@ -72,6 +81,13 @@ interface BackendPlaybackState {
   track_id: number;
   volume: number;
 }
+
+// Mirrors EPHEMERAL_ID_FLOOR in src-tauri/src/ephemeral_library/mod.rs.
+// Track ids at or above this value are synthetic ids from the in-memory
+// ephemeral cache, not DB rows; the playback logic special-cases them
+// in a couple of places (gapless transition is_playing carve-out, CUE
+// virtual-track position translation).
+const EPHEMERAL_ID_FLOOR = 1 << 48;
 
 /**
  * Bit-perfect mode of the active audio stream, reported by the Rust backend.
@@ -300,6 +316,43 @@ export function getPlayerState(): PlayerState {
 }
 
 // ============ Track Actions ============
+
+/**
+ * Attach CUE virtual-track boundary info to the current track. Called
+ * by views that know about CUE structure (today: LocalLibraryView for
+ * ephemeral CUE folders) so the seekbar position/duration can be
+ * recomputed against the virtual track instead of the whole audio
+ * file. Pass `null` for both args to clear.
+ */
+export function patchCurrentTrackCueInfo(
+  startSecs: number | null,
+  endSecs: number | null
+): void {
+  if (!currentTrack) return;
+  const nextStart = startSecs != null ? startSecs : undefined;
+  const nextEnd = endSecs != null ? endSecs : undefined;
+  // Skip work if nothing changed; prevents unnecessary listener spam
+  // since the LocalLibraryView $effect that calls this fires on every
+  // activeTrackId tick.
+  if (currentTrack.cueStartSecs === nextStart && currentTrack.cueEndSecs === nextEnd) {
+    return;
+  }
+  currentTrack = {
+    ...currentTrack,
+    cueStartSecs: nextStart,
+    cueEndSecs: nextEnd,
+  };
+  // Recompute the displayed duration: virtual track length when both
+  // boundaries are known, otherwise fall back to the track's intrinsic
+  // duration field (which is already the CUE virtual duration coming
+  // from cue_to_tracks anyway, but keep the dual-source for robustness).
+  if (nextStart != null && nextEnd != null) {
+    duration = Math.max(0, nextEnd - nextStart);
+  } else {
+    duration = currentTrack.duration;
+  }
+  notifyListeners();
+}
 
 /**
  * Set the current track (called when starting playback)
@@ -696,7 +749,6 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
   // and the UI freezes on the previous track. Qobuz/Plex tracks don't
   // see this race because their playback path keeps is_playing pinned
   // through the streaming buffer transition.
-  const EPHEMERAL_ID_FLOOR = 1 << 48;
   const isEphemeralTransition = event.track_id >= EPHEMERAL_ID_FLOOR;
   const isGaplessTransition = !remoteControlMode
     && event.track_id !== 0
@@ -799,14 +851,34 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     return;
   }
 
+  // CUE virtual tracks share an underlying audio file with each other
+  // (one FLAC, multiple cue slices). After a boundary auto-advance, the
+  // player still emits events with the FIRST slice's track_id while the
+  // displayed currentTrack has moved on to a later virtual track. Accept
+  // those events as belonging to the same logical playback as long as
+  // both ids are in the ephemeral range — within a session that means
+  // they share the same source file, so position is meaningful when
+  // adjusted by the displayed virtual track's cueStartSecs.
+  const isCueVirtualUnderlying =
+    currentTrack.cueStartSecs != null
+    && event.track_id !== currentTrack.id
+    && event.track_id >= EPHEMERAL_ID_FLOOR
+    && currentTrack.id >= EPHEMERAL_ID_FLOOR;
+
   // Update playback state if track matches
-  if (event.track_id === currentTrack.id) {
+  if (event.track_id === currentTrack.id || isCueVirtualUnderlying) {
+    // Translate the player's absolute position into the displayed
+    // (virtual) position when the current track is a CUE virtual slice.
+    // Without the offset, a CUE track that lives at e.g. 7:26 inside the
+    // FLAC would surface 7:26 / 0:00 on the seekbar from frame zero.
+    const cueOffset = currentTrack.cueStartSecs ?? 0;
+    const toDisplayed = (raw: number) => Math.max(0, raw - cueOffset);
     const now = Date.now();
     const seekGuardActive = seekTargetPosition !== null && now < seekGuardUntilMs;
     if (seekGuardActive) {
       const target = seekTargetPosition;
       if (target === null) {
-        currentTime = event.position;
+        currentTime = toDisplayed(event.position);
         isPlaying = event.is_playing;
         return;
       }
@@ -814,7 +886,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
       if (delta <= SEEK_SETTLE_TOLERANCE_SECS) {
         seekTargetPosition = null;
         seekGuardUntilMs = 0;
-        currentTime = event.position;
+        currentTime = toDisplayed(event.position);
       } else {
         // Ignore stale position updates briefly after seek to avoid UI snap-back.
       }
@@ -823,7 +895,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
         seekTargetPosition = null;
         seekGuardUntilMs = 0;
       }
-      currentTime = event.position;
+      currentTime = toDisplayed(event.position);
     }
     isPlaying = event.is_playing;
 

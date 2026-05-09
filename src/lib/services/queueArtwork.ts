@@ -17,6 +17,11 @@ export function resolveQueueTrackArtwork(artworkUrl?: string | null): string {
   if (!artworkUrl) return '';
   if (/^https?:\/\//i.test(artworkUrl)) return artworkUrl;
   if (artworkUrl.startsWith('file://')) return artworkUrl;
+  // Tauri's asset protocol — already resolved upstream (e.g. by
+  // LocalLibraryView's getArtworkUrl when populating the ephemeral
+  // queue). Without this branch the fallthrough below double-converts
+  // and produces a 403 path (asset://localhost/asset%3A%2F%2F...).
+  if (artworkUrl.startsWith('asset:')) return artworkUrl;
   if (artworkUrl.startsWith('/library/')) {
     const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
     const token = getUserItem('qbz-plex-poc-token') || '';

@@ -13,10 +13,12 @@ use image::GenericImageView;
 #[cfg(not(target_os = "linux"))]
 use std::path::PathBuf;
 #[cfg(not(target_os = "linux"))]
+use std::sync::Mutex;
+#[cfg(not(target_os = "linux"))]
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
 #[cfg(target_os = "linux")]
@@ -24,7 +26,56 @@ use tauri::Manager;
 use tauri::AppHandle;
 
 #[cfg(not(target_os = "linux"))]
-const TRAY_ICON_PNG: &[u8] = include_bytes!("../icons/tray.png");
+const TRAY_ICON_COLOR_PNG: &[u8] = include_bytes!("../icons/tray.png");
+#[cfg(not(target_os = "linux"))]
+const TRAY_ICON_MONO_WHITE_PNG: &[u8] = include_bytes!("../icons/tray-dark-64.png");
+#[cfg(not(target_os = "linux"))]
+const TRAY_ICON_MONO_BLACK_PNG: &[u8] = include_bytes!("../icons/tray-light-64.png");
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Clone, Copy, Debug)]
+enum IconVariant {
+    /// Black glyph — for light menu bars.
+    MonoBlack,
+    /// White glyph — for dark menu bars.
+    MonoWhite,
+    /// Full colour vinyl logo.
+    Color,
+}
+
+#[cfg(not(target_os = "linux"))]
+pub struct NativeTrayHandle {
+    tray: Mutex<Option<TrayIcon>>,
+}
+
+#[cfg(not(target_os = "linux"))]
+impl NativeTrayHandle {
+    fn empty() -> Self {
+        Self {
+            tray: Mutex::new(None),
+        }
+    }
+
+    fn install(&self, tray: TrayIcon) {
+        if let Ok(mut guard) = self.tray.lock() {
+            *guard = Some(tray);
+        }
+    }
+
+    pub fn set_icon_theme(&self, theme: String) {
+        let tray = match self.tray.lock() {
+            Ok(guard) => guard.as_ref().cloned(),
+            Err(_) => None,
+        };
+        let Some(tray) = tray else {
+            return;
+        };
+
+        if let Err(e) = tray.set_icon(Some(load_tray_icon(Some(&theme)))) {
+            log::error!("[tray] failed to set macOS tray icon theme '{}': {}", theme, e);
+        }
+    }
+}
 
 /// Ensure tray icon is available in the user's icon theme directory.
 /// This makes the icon discoverable by libayatana-appindicator via
@@ -49,7 +100,7 @@ fn ensure_tray_icon_in_theme() {
         if std::fs::create_dir_all(&icon_dir).is_ok() {
             let icon_path = icon_dir.join("com.blitzfc.qbz.png");
             if !icon_path.exists() {
-                if let Err(e) = std::fs::write(&icon_path, TRAY_ICON_PNG) {
+                if let Err(e) = std::fs::write(&icon_path, TRAY_ICON_COLOR_PNG) {
                     log::warn!("Failed to write tray icon to theme dir: {}", e);
                 } else {
                     log::info!("Installed tray icon to {:?}", icon_path);
@@ -66,9 +117,46 @@ fn is_flatpak() -> bool {
     std::env::var("FLATPAK_ID").is_ok() || std::path::Path::new("/.flatpak-info").exists()
 }
 
-/// Get the tray icon - loads from file in Flatpak, embedded data otherwise
+/// Detect whether the macOS menu bar is currently dark. We key off the global
+/// Apple interface style so `auto` can mirror the Linux tray theme behavior:
+/// white glyph on dark chrome, black glyph on light chrome.
+#[cfg(target_os = "macos")]
+fn prefer_dark_tray() -> bool {
+    if let Ok(out) = std::process::Command::new("defaults")
+        .args(["read", "-g", "AppleInterfaceStyle"])
+        .output()
+    {
+        if out.status.success() {
+            return String::from_utf8_lossy(&out.stdout).trim() == "Dark";
+        }
+    }
+    false
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
+fn prefer_dark_tray() -> bool {
+    false
+}
+
 #[cfg(not(target_os = "linux"))]
-fn load_tray_icon() -> Image<'static> {
+fn resolve_variant(theme_override: Option<&str>) -> IconVariant {
+    match theme_override {
+        Some("mono-light") => IconVariant::MonoWhite,
+        Some("mono-dark") => IconVariant::MonoBlack,
+        Some("color") => IconVariant::Color,
+        _ => {
+            if prefer_dark_tray() {
+                IconVariant::MonoWhite
+            } else {
+                IconVariant::MonoBlack
+            }
+        }
+    }
+}
+
+/// Get the tray icon - loads from file in Flatpak, embedded data otherwise.
+#[cfg(not(target_os = "linux"))]
+fn load_tray_icon(theme_override: Option<&str>) -> Image<'static> {
     // In Flatpak, try to use the installed icon file first
     // This works better with StatusNotifierItem/libayatana-appindicator
     if is_flatpak() {
@@ -87,7 +175,12 @@ fn load_tray_icon() -> Image<'static> {
     }
 
     // Default: decode embedded PNG
-    let img = image::load_from_memory(TRAY_ICON_PNG).expect("Failed to decode tray icon PNG");
+    let icon_bytes = match resolve_variant(theme_override) {
+        IconVariant::MonoBlack => TRAY_ICON_MONO_BLACK_PNG,
+        IconVariant::MonoWhite => TRAY_ICON_MONO_WHITE_PNG,
+        IconVariant::Color => TRAY_ICON_COLOR_PNG,
+    };
+    let img = image::load_from_memory(icon_bytes).expect("Failed to decode tray icon PNG");
     let (width, height) = img.dimensions();
     let rgba = img.into_rgba8().into_raw();
     Image::new_owned(rgba, width, height)
@@ -100,7 +193,7 @@ fn load_tray_icon() -> Image<'static> {
 /// On Linux this also installs the live `LinuxTrayHandle` into Tauri state
 /// so the rest of the backend can push live tooltip updates as the player
 /// state changes. `theme_override` is the persisted user preference for
-/// the icon variant ("auto"/"light"/"dark"); ignored on macOS.
+/// the icon variant.
 pub fn init_tray(
     app: &AppHandle,
     #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
@@ -114,13 +207,20 @@ pub fn init_tray(
     }
 
     #[cfg(not(target_os = "linux"))]
-    init_tray_tauri(app)
+    {
+        let handle = init_tray_tauri(app, theme_override)?;
+        app.manage(handle);
+        Ok(())
+    }
 }
 
 /// Tauri-backed tray implementation used on macOS. Kept as a separate fn so
 /// the Linux path doesn't pay to compile the Tauri tray at all.
 #[cfg(not(target_os = "linux"))]
-fn init_tray_tauri(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+fn init_tray_tauri(
+    app: &AppHandle,
+    theme_override: Option<&str>,
+) -> Result<NativeTrayHandle, Box<dyn std::error::Error>> {
     log::info!("Initializing system tray icon (Tauri backend)");
 
     // Create menu items
@@ -150,7 +250,7 @@ fn init_tray_tauri(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     ensure_tray_icon_in_theme();
 
     // Load custom tray icon (with transparent background)
-    let tray_icon = load_tray_icon();
+    let tray_icon = load_tray_icon(theme_override);
 
     // Build and display tray icon
     let mut builder = TrayIconBuilder::new()
@@ -177,7 +277,7 @@ fn init_tray_tauri(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let _tray = builder
+    let tray = builder
         .on_menu_event(|app, event| {
             let id = event.id.as_ref();
             log::info!("Tray menu event: {}", id);
@@ -266,5 +366,7 @@ fn init_tray_tauri(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .build(app)?;
 
     log::info!("System tray icon initialized");
-    Ok(())
+    let live = NativeTrayHandle::empty();
+    live.install(tray);
+    Ok(live)
 }

@@ -3522,7 +3522,9 @@
     try {
       await invoke('v2_set_enable_tray', { value });
       enableTray = value;
-      showToast($t('settings.appearance.tray.enableTrayDesc'), 'info');
+      showToast($t(platform === 'macos'
+        ? 'settings.appearance.tray.enableTrayDescMacos'
+        : 'settings.appearance.tray.enableTrayDesc'), 'info');
     } catch (err) {
       console.error('Failed to set enable tray:', err);
       showToast($t('toast.failedSaveTray'), 'error');
@@ -5056,6 +5058,7 @@
       </div>
       <Toggle enabled={closeToTray} onchange={(v) => handleCloseToTrayChange(v)} disabled={!enableTray} />
     </div>
+    {/if}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.tray.iconTheme.label')}</span>
@@ -5067,7 +5070,6 @@
         onchange={handleTrayIconThemeChange}
       />
     </div>
-    {/if}
 
     <!-- Immersive subsection -->
     <h4 class="subsection-title">{$t('settings.appearance.immersive.title')}</h4>

@@ -74,13 +74,12 @@ pub fn v2_set_close_to_tray(
 }
 
 /// Update the tray icon variant ("auto" / "light" / "dark"). Persists
-/// the setting and pushes the change to the live SNI tray on Linux so
-/// it takes effect immediately — no restart required.
+/// the setting and pushes the change to the live tray handle when one is
+/// active, so it takes effect immediately — no restart required.
 #[tauri::command]
 pub fn v2_set_tray_icon_theme(
     value: String,
     state: State<'_, TraySettingsState>,
-    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     let normalized = crate::config::tray_settings::normalize_tray_icon_theme(&value);
@@ -99,6 +98,14 @@ pub fn v2_set_tray_icon_theme(
         if let Some(tray) =
             app_handle.try_state::<crate::tray_linux_ksni::LinuxTrayHandle>()
         {
+            tray.set_icon_theme(normalized);
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        use tauri::Manager;
+        if let Some(tray) = app_handle.try_state::<crate::tray::NativeTrayHandle>() {
             tray.set_icon_theme(normalized);
         }
     }

@@ -148,7 +148,7 @@ impl PipeWireBackend {
     /// 44.1kHz family: 44100, 88200, 176400, 352800
     /// 48kHz family: 48000, 96000, 192000, 384000
     fn find_best_fallback_rate(requested: u32, supported: &[u32]) -> u32 {
-        let is_441_family = requested % 44100 == 0;
+        let is_441_family = requested.is_multiple_of(44100);
 
         // Find highest supported rate in the same family that's <= requested
         let mut candidates: Vec<u32> = supported

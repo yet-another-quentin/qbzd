@@ -1,3 +1,6 @@
+# qbzd — Qobuz Connect receiver (headless daemon)
+# Fork of vicrodh/qbz (https://github.com/vicrodh/qbz) — MIT license.
+
 # ─────────────────────────────────────────────
 # Stage 1 — build
 # ─────────────────────────────────────────────
@@ -29,14 +32,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # D-Bus (MPRIS + zbus device reservation + dbus-launch)
     dbus \
     dbus-x11 \
-    # CA certificates (HTTPS vers Qobuz)
+    # CA certificates (HTTPS to Qobuz)
     ca-certificates \
-    # pw-metadata + pactl utilisés par le backend PipeWire
+    # pw-metadata + pactl used by the PipeWire backend
     pipewire-bin \
     pulseaudio-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Utilisateur dédié — membre du groupe audio pour accès /dev/snd
+# Dedicated user — member of the audio group for /dev/snd access
 RUN groupadd -r qbzd \
     && useradd -r -g qbzd -G audio -m -d /var/lib/qbzd -s /sbin/nologin qbzd
 
@@ -51,10 +54,10 @@ RUN chmod +x /entrypoint.sh \
     && chown qbzd:qbzd /run/user/$(id -u qbzd) \
     && chmod 700 /run/user/$(id -u qbzd)
 
-# Données persistantes (tokens, cache, db)
+# Persistent data (tokens, cache, db)
 VOLUME ["/var/lib/qbzd"]
 
-# API HTTP
+# HTTP API
 EXPOSE 8182
 
 USER qbzd

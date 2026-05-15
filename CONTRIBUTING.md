@@ -2,6 +2,11 @@
 
 Contributions are welcome. This project is a headless Rust daemon — no frontend, no build system beyond `cargo`.
 
+> qbzd is a fork of [vicrodh/qbz](https://github.com/vicrodh/qbz). The core
+> architecture comes from that project. When working on audio backends, the
+> Qobuz API client, or the QConnect protocol, the original codebase is a
+> useful reference.
+
 ## Ground rules
 
 - Keep PRs focused. One concern per PR.

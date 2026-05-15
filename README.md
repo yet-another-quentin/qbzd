@@ -136,8 +136,17 @@ crates/
 
 ---
 
+## Credits
+
+qbzd is a fork of [vicrodh/qbz](https://github.com/vicrodh/qbz) by
+[blitzkriegfc](https://github.com/vicrodh), the original author of the Qobuz
+Connect receiver. The core architecture, audio backends, Qobuz API client, and
+QConnect protocol implementation all originate from that project.
+
+This fork strips the desktop UI and refocuses the project as a headless daemon.
+The upstream project is MIT-licensed and its copyright is preserved in full in
+[LICENSE](LICENSE).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-Based on [vicrodh/qbz](https://github.com/vicrodh/qbz), also MIT.

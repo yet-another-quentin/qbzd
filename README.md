@@ -104,7 +104,7 @@ Full spec: `docs/openapi.yaml`
 
 ```bash
 git clone https://github.com/qbarlas/qbzd.git
-cd qonnect/crates
+cd qbzd/crates
 cargo build --release -p qbzd
 ```
 

@@ -1,0 +1,41 @@
+# Configuration par défaut pour le container qbzd
+# Montez /var/lib/qbzd/config/qbzd.toml pour surcharger.
+
+[server]
+bind = "0.0.0.0"
+port = 8182
+token = "auto"
+
+[audio]
+backend = "pipewire"    # pipewire | alsa | pulse
+device = ""             # vide = périphérique par défaut
+gapless = true
+normalization = false
+
+[cache]
+memory_mb = 0           # 0 = auto (100 MB / Go de RAM)
+disk_mb = 400
+prefetch_count = 2
+prefetch_concurrent = 1
+cmaf_concurrent_segments = 2
+
+[cache.auto]
+enabled = true
+
+[data]
+dir = "/var/lib/qbzd"
+
+[mpris]
+enabled = false     # zbus/tokio conflict dans un container headless
+
+[qconnect]
+enabled = true
+device_name = ""        # vide = hostname du container
+
+[mdns]
+enabled = true
+name = ""
+
+[logging]
+level = "info"
+journal = false         # pas de systemd journal dans un container

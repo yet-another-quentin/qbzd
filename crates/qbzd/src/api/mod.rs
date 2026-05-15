@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod audio;
 pub mod catalog;
 pub mod catalog_ext;

@@ -6,116 +6,122 @@
 //!   callback to the daemon's LAN IP so the redirect works from
 //!   any browser on the same network.
 
-use qbz_qobuz::QobuzClient;
+const OAUTH_TIMEOUT_SECS: u64 = 300;
 
-const OAUTH_TIMEOUT_SECS: u64 = 300; // 5 min for remote login (user needs time to copy URL)
+pub async fn interactive_login(
+    qobuz_token: Option<String>,
+    callback_host: Option<String>,
+    daemon_port: u16,
+) -> Result<(), String> {
+    if let Some(token) = qobuz_token {
+        return login_with_direct_token(&token, daemon_port).await;
+    }
+    oauth_via_daemon(callback_host, daemon_port).await
+}
 
-pub async fn interactive_login() -> Result<(), String> {
-    println!("Initializing Qobuz client...");
-
-    let client = QobuzClient::new().map_err(|e| format!("Client error: {}", e))?;
-    client.init().await.map_err(|e| format!("Bundle extraction failed: {}", e))?;
-
-    let app_id = client.app_id().await.map_err(|e| format!("No app_id: {}", e))?;
-
-    // Bind to 0.0.0.0 so the callback works from any device on the LAN
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
+/// Validate a Qobuz user_auth_token directly, without OAuth.
+async fn login_with_direct_token(token: &str, daemon_port: u16) -> Result<(), String> {
+    let http = reqwest::Client::new();
+    let url = format!("http://127.0.0.1:{}/api/auth/token", daemon_port);
+    let resp = http
+        .post(&url)
+        .json(&serde_json::json!({ "token": token }))
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
         .await
-        .map_err(|e| format!("Failed to bind listener: {}", e))?;
-    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+        .map_err(|e| format!("Daemon not reachable on port {}: {}", daemon_port, e))?;
 
-    // Detect LAN IP for the redirect URL
-    let lan_ip = detect_lan_ip().unwrap_or_else(|| "localhost".to_string());
-    let redirect_url = format!("http://{}:{}", lan_ip, port);
+    if resp.status().is_success() {
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        println!("\nLogged in as: {}", body["display_name"].as_str().unwrap_or("?"));
+        println!("Credentials saved. The daemon will auto-login on next start.");
+        Ok(())
+    } else {
+        let msg: serde_json::Value = resp.json().await.unwrap_or_default();
+        Err(msg["error"].as_str().unwrap_or("Token validation failed").to_string())
+    }
+}
 
-    let oauth_url = format!(
-        "https://www.qobuz.com/signin/oauth?ext_app_id={}&redirect_url={}",
-        app_id,
-        urlencoding::encode(&redirect_url),
-    );
+/// OAuth flow via the running daemon — callback lands on the daemon's own port.
+async fn oauth_via_daemon(callback_host: Option<String>, daemon_port: u16) -> Result<(), String> {
+    let http = reqwest::Client::new();
+    let base = format!("http://127.0.0.1:{}", daemon_port);
 
-    // Channel for the auth code
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
+    // Check daemon is reachable
+    http.get(format!("{}/api/ping", base))
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+        .map_err(|_| format!(
+            "Daemon not reachable on port {}. Start the daemon first.",
+            daemon_port
+        ))?;
 
-    // Local HTTP handler
-    let handler = axum::Router::new().route(
-        "/",
-        axum::routing::get(move |axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>| {
-            let tx = tx.clone();
-            async move {
-                if let Some(code) = params.get("code_autorisation").or_else(|| params.get("code")) {
-                    let _ = tx.send(code.clone()).await;
-                    axum::response::Html(
-                        "<html><body style=\"font-family:system-ui;text-align:center;padding:60px\">\
-                         <h2>Login successful!</h2>\
-                         <p>You can close this tab and return to the terminal.</p>\
-                         </body></html>"
-                    )
-                } else {
-                    axum::response::Html(
-                        "<html><body style=\"font-family:system-ui;text-align:center;padding:60px\">\
-                         <h2>Login failed</h2>\
-                         <p>No authorization code received.</p>\
-                         </body></html>"
-                    )
-                }
-            }
-        }),
-    );
+    // Start OAuth flow
+    let start_url = match callback_host {
+        Some(ref h) => format!("{}/api/auth/oauth/start?callback_host={}", base, urlencoding::encode(h)),
+        None => format!("{}/api/auth/oauth/start", base),
+    };
+    let start_resp: serde_json::Value = http
+        .post(&start_url)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to start OAuth: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response from daemon: {}", e))?;
 
-    let server_handle = tokio::spawn(async move {
-        axum::serve(listener, handler).await.ok();
-    });
+    let oauth_url = start_resp["oauth_url"].as_str()
+        .ok_or("Daemon returned no oauth_url")?;
+    let callback_url = start_resp["callback_url"].as_str()
+        .unwrap_or("?");
 
-    // Always print the URL (works for both local and headless)
     println!("\n╔══════════════════════════════════════════════════╗");
     println!("║  Open this URL in any browser on your network:  ║");
     println!("╚══════════════════════════════════════════════════╝\n");
     println!("  {}\n", oauth_url);
-    println!("Callback listening on: {}", redirect_url);
+    println!("Callback URL (handled by the daemon): {}", callback_url);
     println!("Waiting for login ({}s timeout)...\n", OAUTH_TIMEOUT_SECS);
 
-    // Try to open browser (works on local, silently fails on headless)
-    let _ = open::that(&oauth_url);
+    let _ = open::that(oauth_url);
 
-    // Wait for code
-    let code = tokio::time::timeout(
-        std::time::Duration::from_secs(OAUTH_TIMEOUT_SECS),
-        rx.recv(),
-    )
-    .await;
+    // Poll /api/auth/oauth/status
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_secs(OAUTH_TIMEOUT_SECS);
+    loop {
+        if std::time::Instant::now() > deadline {
+            return Err(format!("Login timed out after {}s", OAUTH_TIMEOUT_SECS));
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-    server_handle.abort();
+        let status: serde_json::Value = http
+            .get(format!("{}/api/auth/oauth/status", base))
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+            .map_err(|e| format!("Status poll failed: {}", e))?
+            .json()
+            .await
+            .unwrap_or_default();
 
-    let code = match code {
-        Ok(Some(c)) => c,
-        Ok(None) => return Err("Login cancelled".to_string()),
-        Err(_) => return Err(format!("Login timed out after {}s", OAUTH_TIMEOUT_SECS)),
-    };
-
-    println!("Authorization code received. Exchanging for session...");
-
-    let session = client
-        .login_with_oauth_code(&code)
-        .await
-        .map_err(|e| format!("OAuth exchange failed: {}", e))?;
-
-    println!(
-        "\nLogged in as: {} (user_id: {})",
-        session.display_name, session.user_id
-    );
-    println!("Subscription: {}", session.subscription_label);
-
-    // Save token to keyring
-    let token = session.user_auth_token.clone();
-    save_token_to_keyring(&token)?;
-
-    println!("\nCredentials saved. The daemon will auto-login on next start.");
-    Ok(())
+        match status["status"].as_str() {
+            Some("success") => {
+                println!("\nLogged in successfully.");
+                println!("The daemon is now authenticated and Qobuz Connect is active.");
+                return Ok(());
+            }
+            Some("error") => {
+                let msg = status["message"].as_str().unwrap_or("Unknown error");
+                return Err(format!("Login failed: {}", msg));
+            }
+            _ => {} // pending — keep polling
+        }
+    }
 }
 
 /// Save OAuth token — tries keyring first, falls back to encrypted file.
-fn save_token_to_keyring(token: &str) -> Result<(), String> {
+pub(crate) fn save_token_to_keyring(token: &str) -> Result<(), String> {
     const SERVICE: &str = "qbz-player";
     const KEY: &str = "qobuz-oauth-token";
 
@@ -165,7 +171,7 @@ pub fn load_token_from_file() -> Option<String> {
 }
 
 /// Detect the primary LAN IP address of this machine.
-fn detect_lan_ip() -> Option<String> {
+pub(crate) fn detect_lan_ip() -> Option<String> {
     // Try to get the default route interface IP by connecting to a public DNS
     // (no actual data is sent, just gets the local IP used for routing)
     let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;

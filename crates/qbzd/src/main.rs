@@ -53,8 +53,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Interactive Qobuz login (OAuth via system browser)
-    Login,
+    /// Authenticate with Qobuz via OAuth (daemon must be running).
+    Login {
+        /// Direct Qobuz user_auth_token — skips the browser OAuth flow.
+        #[arg(long)]
+        token: Option<String>,
+        /// Public base URL used as OAuth callback, e.g. "http://192.168.1.10:8182".
+        /// Defaults to http://<LAN-IP>:<port>. Use "http://localhost:8182" in Docker.
+        #[arg(long)]
+        callback_host: Option<String>,
+    },
     /// Show daemon status
     Status,
     /// Show or regenerate API token
@@ -72,8 +80,17 @@ async fn main() {
     let cli = Cli::parse();
 
     // Init logging
+    let level = cli.log_level.parse().unwrap_or(log::LevelFilter::Info);
     env_logger::Builder::new()
-        .filter_level(cli.log_level.parse().unwrap_or(log::LevelFilter::Info))
+        .filter_level(level)
+        .filter_module("zbus", log::LevelFilter::Warn)
+        .filter_module("tracing", log::LevelFilter::Warn)
+        .filter_module("mio", log::LevelFilter::Warn)
+        .filter_module("hyper", log::LevelFilter::Warn)
+        .filter_module("reqwest", log::LevelFilter::Warn)
+        .filter_module("symphonia", log::LevelFilter::Warn)
+        .filter_module("tokio_tungstenite", log::LevelFilter::Warn)
+        .filter_module("tungstenite", log::LevelFilter::Warn)
         .format_timestamp_millis()
         .init();
 
@@ -105,8 +122,8 @@ async fn main() {
 
     // Handle subcommands
     match cli.command {
-        Some(Commands::Login) => {
-            if let Err(e) = login::interactive_login().await {
+        Some(Commands::Login { token, callback_host }) => {
+            if let Err(e) = login::interactive_login(token, callback_host, cfg.server.port).await {
                 eprintln!("Login failed: {}", e);
                 std::process::exit(1);
             }

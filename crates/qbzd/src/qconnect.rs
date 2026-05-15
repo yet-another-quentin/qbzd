@@ -59,17 +59,17 @@ impl QconnectEventSink for HeadlessQconnectSink {
                 log::warn!("[qbzd/qconnect] Disconnected");
             }
             QconnectAppEvent::RendererCommandApplied { command, .. } => {
-                log::info!("[qbzd/qconnect] Command: {:?}", command);
+                log::debug!("[qbzd/qconnect] Command: {:?}", command);
                 handle_renderer_command(&self.core, command, &self.qconnect_next_track_id).await;
             }
             QconnectAppEvent::QueueUpdated(queue_state) => {
-                log::info!("[qbzd/qconnect] Queue: {} items", queue_state.queue_items.len());
+                log::debug!("[qbzd/qconnect] Queue: {} items", queue_state.queue_items.len());
                 if let Err(e) = materialize_remote_queue(&self.core, queue_state).await {
                     log::warn!("[qbzd/qconnect] Failed to materialize queue: {}", e);
                 }
             }
             QconnectAppEvent::SessionManagementEvent { message_type, payload } => {
-                log::info!("[qbzd/qconnect] Session mgmt: {}", message_type);
+                log::debug!("[qbzd/qconnect] Session mgmt: {}", message_type);
             }
             _ => {}
         }
@@ -86,7 +86,7 @@ async fn handle_renderer_command(
             // Track the next_track for orchestrator's auto-advance fallback
             if let Some(nt) = next_track {
                 qconnect_next_track_id.store(nt.track_id, std::sync::atomic::Ordering::Release);
-                log::info!("[qbzd/qconnect] Stored next_track for auto-advance: {}", nt.track_id);
+                log::debug!("[qbzd/qconnect] Stored next_track for auto-advance: {}", nt.track_id);
             }
 
             // Step 1: If a current_track is specified, ensure it's loaded
@@ -201,7 +201,7 @@ async fn materialize_remote_queue(
     queue_state: &QConnectQueueState,
 ) -> Result<(), String> {
     if queue_state.queue_items.is_empty() {
-        log::info!("[qbzd/qconnect] Empty queue, skipping materialization");
+        log::debug!("[qbzd/qconnect] Empty queue, skipping materialization");
         return Ok(());
     }
 
@@ -213,7 +213,7 @@ async fn materialize_remote_queue(
         }
     }
 
-    log::info!(
+    log::debug!(
         "[qbzd/qconnect] Materializing remote queue: {} items, {} unique tracks",
         queue_state.queue_items.len(),
         unique_ids.len()
@@ -259,7 +259,7 @@ async fn materialize_remote_queue(
         Some(0)
     };
 
-    log::info!(
+    log::debug!(
         "[qbzd/qconnect] Setting local queue: {} tracks, start_index={:?}",
         queue_tracks.len(),
         start_index
@@ -295,6 +295,7 @@ fn track_to_queue_track(track: &Track) -> QueueTrack {
     QueueTrack {
         id: track.id,
         title: track.title.clone(),
+        version: track.version.clone(),
         artist,
         album: album_title,
         duration_secs: track.duration as u64,
@@ -364,7 +365,7 @@ pub async fn start_qconnect(
                             ref evt,
                         ) = event
                         {
-                            log::info!("[qbzd/qconnect] Queue server event: {}", evt.message_type());
+                            log::debug!("[qbzd/qconnect] Queue server event: {}", evt.message_type());
                             if evt.message_type() == "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" {
                                 if let Some(session_uuid) =
                                     evt.payload.get("session_uuid").and_then(|v| v.as_str())

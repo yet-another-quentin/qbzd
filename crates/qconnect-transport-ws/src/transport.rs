@@ -685,14 +685,14 @@ fn handle_incoming_binary(
             //   field 2 (int32): messages_id
             //   field 3 (repeated): QConnectMessage entries
             // Pass directly to decoders — no inner envelope unwrapping needed.
-            log::info!(
+            log::debug!(
                 "[QConnect/Decode] Decoding QConnectBatch: {} bytes",
                 inner_payload.len()
             );
 
             match decode_queue_server_events(&inner_payload) {
                 Ok(events) => {
-                    log::info!("[QConnect/Decode] Queue events decoded: {}", events.len());
+                    log::debug!("[QConnect/Decode] Queue events decoded: {}", events.len());
                     for event in events {
                         if event.event_type == QueueEventType::SrvrCtrlSessionState {
                             outcome.session_state_seen = true;
@@ -708,7 +708,7 @@ fn handle_incoming_binary(
             match decode_renderer_server_commands(&inner_payload) {
                 Ok(commands) => {
                     if !commands.is_empty() {
-                        log::info!(
+                        log::debug!(
                             "[QConnect/Decode] Renderer commands decoded: {}",
                             commands.len()
                         );

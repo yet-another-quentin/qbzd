@@ -27,6 +27,10 @@ pub struct DaemonCore {
     /// QConnect next track id (from SetState.next_track) for auto-advance
     /// when iOS controls without sending a queue. 0 = no next track known.
     pub qconnect_next_track_id: Arc<std::sync::atomic::AtomicU64>,
+    /// OAuth flow state (start → callback → status polling)
+    pub oauth: crate::api::auth::SharedOAuthState,
+    /// True once QConnect background tasks have been spawned (prevents double-start).
+    pub qconnect_started: std::sync::atomic::AtomicBool,
 }
 
 /// Run the daemon main loop.
@@ -39,14 +43,31 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
     // Create adapter for QbzCore events
     let adapter = DaemonAdapter::new(event_tx.clone());
 
-    // Load audio settings (from shared database if exists)
-    let audio_settings = AudioSettingsStore::new()
+    // Load audio settings from DB, then apply TOML config as fallback for
+    // fields that were never saved (first run or fresh volume).
+    let mut audio_settings = AudioSettingsStore::new()
         .ok()
         .and_then(|store| store.get_settings().ok())
         .unwrap_or_else(|| {
             log::info!("[qbzd] No saved audio settings, using defaults");
             AudioSettings::default()
         });
+
+    if audio_settings.backend_type.is_none() {
+        audio_settings.backend_type = match config.audio.backend.as_str() {
+            "pipewire" | "pw" => Some(qbz_audio::AudioBackendType::PipeWire),
+            "alsa"            => Some(qbz_audio::AudioBackendType::Alsa),
+            "pulse"           => Some(qbz_audio::AudioBackendType::Pulse),
+            _                 => None,
+        };
+        log::info!("[qbzd] Audio backend from config: {:?}", audio_settings.backend_type);
+    }
+
+    if !config.audio.device.is_empty() && audio_settings.output_device.is_none() {
+        audio_settings.output_device = Some(config.audio.device.clone());
+    }
+
+    audio_settings.gapless_enabled = config.audio.gapless;
 
     let device_name = audio_settings.output_device.clone();
     log::info!(
@@ -82,6 +103,8 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
         user: RwLock::new(None),
         skip_auto_advance: std::sync::atomic::AtomicBool::new(false),
         qconnect_next_track_id: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        oauth: Arc::new(tokio::sync::Mutex::new(crate::api::auth::OAuthState::default())),
+        qconnect_started: std::sync::atomic::AtomicBool::new(false),
     });
 
     // Try auto-login from saved OAuth token
@@ -101,24 +124,7 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
                 }
             }
 
-            // Start QConnect if enabled
-            if config.qconnect.enabled {
-                let device_name = if config.qconnect.device_name.is_empty() {
-                    hostname::get()
-                        .ok()
-                        .and_then(|h| h.into_string().ok())
-                        .unwrap_or_else(|| "qbzd".to_string())
-                } else {
-                    config.qconnect.device_name.clone()
-                };
-                let _qconnect = crate::qconnect::start_qconnect(
-                    &core,
-                    event_tx.clone(),
-                    &device_name,
-                    daemon.qconnect_next_track_id.clone(),
-                )
-                .await;
-            }
+            start_qconnect_if_needed(&daemon).await;
         }
         None => {
             log::warn!("[qbzd] No saved credentials. Run `qbzd login` to authenticate.");
@@ -212,7 +218,11 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
 /// Try to restore session from saved OAuth token in keyring.
 /// Returns the user_id on success.
 async fn try_auto_login(core: &QbzCore<DaemonAdapter>) -> Option<u64> {
-    let token = load_oauth_token()?;
+    // load_oauth_token uses keyring (zbus blocking) — must run outside the tokio runtime.
+    let token = tokio::task::spawn_blocking(load_oauth_token)
+        .await
+        .ok()
+        .flatten()?;
 
     match core.login_with_token(&token).await {
         Ok(session) => {
@@ -575,9 +585,14 @@ macro_rules! with_daemon {
 fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
     use axum::routing::{get, post, patch, put, delete};
     use axum::middleware as axum_mw;
-    use crate::api::{audio, catalog, catalog_ext, discover, favorites, integrations, library, middleware, playback, playlists, queue, search, system};
+    use crate::api::{auth, audio, catalog, catalog_ext, discover, favorites, integrations, library, middleware, playback, playlists, queue, search, system};
 
     axum::Router::new()
+        // Auth — OAuth callback on daemon port + direct token
+        .route("/api/auth/oauth/start", post(with_daemon!(daemon, auth::start, query)))
+        .route("/api/auth/oauth/callback", get(with_daemon!(daemon, auth::callback, query)))
+        .route("/api/auth/oauth/status", get(with_daemon!(daemon, auth::status)))
+        .route("/api/auth/token", post(with_daemon!(daemon, auth::set_token, json)))
         // System
         .route("/api/ping", get(ping_handler))
         .route("/api/info", get(with_daemon!(daemon, info_handler)))
@@ -690,11 +705,54 @@ async fn info_handler(daemon: Arc<DaemonCore>) -> axum::Json<serde_json::Value> 
 
 async fn status_handler(daemon: Arc<DaemonCore>) -> axum::Json<serde_json::Value> {
     let logged_in = daemon.core.has_session().await;
+    let qconnect_active = daemon.qconnect_started.load(std::sync::atomic::Ordering::Relaxed);
     axum::Json(serde_json::json!({
         "state": if logged_in { "ready" } else { "no_session" },
         "logged_in": logged_in,
+        "qconnect": qconnect_active,
         "audio": {
             "cache_mb": daemon.config.cache.memory_mb,
         },
     }))
+}
+
+/// Start QConnect background tasks if not already running.
+/// Safe to call multiple times — the AtomicBool prevents double-start.
+pub async fn start_qconnect_if_needed(daemon: &Arc<DaemonCore>) {
+    if !daemon.config.qconnect.enabled {
+        return;
+    }
+    // compare_exchange: only proceed if currently false, set to true atomically
+    if daemon.qconnect_started
+        .compare_exchange(false, true,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire)
+        .is_err()
+    {
+        log::debug!("[qbzd] QConnect already started, skipping");
+        return;
+    }
+
+    let device_name = if daemon.config.qconnect.device_name.is_empty() {
+        "Qobuz Connect Daemon".to_string()
+    } else {
+        daemon.config.qconnect.device_name.clone()
+    };
+
+    let started = crate::qconnect::start_qconnect(
+        &daemon.core,
+        daemon.event_bus.clone(),
+        &device_name,
+        daemon.qconnect_next_track_id.clone(),
+    )
+    .await
+    .is_some();
+
+    if !started {
+        // Reset flag so a future retry is possible
+        daemon.qconnect_started.store(false, std::sync::atomic::Ordering::Release);
+        log::warn!("[qbzd] QConnect failed to start");
+    } else {
+        log::info!("[qbzd] QConnect started as '{}'", device_name);
+    }
 }

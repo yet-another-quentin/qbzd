@@ -95,6 +95,7 @@ pub async fn play_album(
         qbz_models::QueueTrack {
             id: track.id,
             title: track.title.clone(),
+            version: track.version.clone(),
             artist: track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_default(),
             album: album.title.clone(),
             duration_secs: track.duration as u64,

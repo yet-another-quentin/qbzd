@@ -90,6 +90,7 @@ pub struct UpdateSettingsRequest {
     pub output_device: Option<String>,
     pub exclusive_mode: Option<bool>,
     pub dac_passthrough: Option<bool>,
+    #[allow(dead_code)]
     pub volume_normalization: Option<bool>,
 }
 

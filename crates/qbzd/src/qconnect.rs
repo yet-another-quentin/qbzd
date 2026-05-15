@@ -33,6 +33,7 @@ type App = QconnectApp<NativeWsTransport, HeadlessQconnectSink>;
 
 /// Event sink — handles renderer commands for playback.
 pub struct HeadlessQconnectSink {
+    #[allow(dead_code)]
     event_tx: broadcast::Sender<DaemonEvent>,
     core: Arc<qbz_core::QbzCore<DaemonAdapter>>,
     qconnect_next_track_id: Arc<std::sync::atomic::AtomicU64>,
@@ -68,7 +69,7 @@ impl QconnectEventSink for HeadlessQconnectSink {
                     log::warn!("[qbzd/qconnect] Failed to materialize queue: {}", e);
                 }
             }
-            QconnectAppEvent::SessionManagementEvent { message_type, payload } => {
+            QconnectAppEvent::SessionManagementEvent { message_type, payload: _ } => {
                 log::debug!("[qbzd/qconnect] Session mgmt: {}", message_type);
             }
             _ => {}
@@ -134,10 +135,8 @@ async fn handle_renderer_command(
                 }
             }
         }
-        RendererCommand::SetVolume { volume, .. } => {
-            if let Some(vol) = volume {
-                let _ = core.set_volume((*vol as f32 / 100.0).clamp(0.0, 1.0));
-            }
+        RendererCommand::SetVolume { volume: Some(vol), .. } => {
+            let _ = core.set_volume((*vol as f32 / 100.0).clamp(0.0, 1.0));
         }
         RendererCommand::SetShuffleMode { shuffle_mode } => {
             core.set_shuffle(*shuffle_mode).await;
@@ -150,8 +149,8 @@ async fn handle_renderer_command(
             };
             core.set_repeat_mode(mode).await;
         }
-        RendererCommand::MuteVolume { value } => {
-            if *value { let _ = core.set_volume(0.0); }
+        RendererCommand::MuteVolume { value } if *value => {
+            let _ = core.set_volume(0.0);
         }
         _ => {}
     }
@@ -508,7 +507,7 @@ async fn bootstrap_remote_presence(app: &Arc<App>, device_name: &str) -> Result<
         "device_info": device_info,
     });
     let join_cmd = app.build_queue_command(QueueCommandType::CtrlSrvrJoinSession, join_payload).await;
-    let join_uuid = app.send_queue_command(join_cmd).await
+    let _join_uuid = app.send_queue_command(join_cmd).await
         .map_err(|e| format!("join_session failed: {}", e))?;
 
     // Clear pending (desktop line 3825)
@@ -520,7 +519,7 @@ async fn bootstrap_remote_presence(app: &Arc<App>, device_name: &str) -> Result<
 
     // 2. Ask for current queue state from server
     let ask_cmd = app.build_queue_command(QueueCommandType::CtrlSrvrAskForQueueState, serde_json::json!({})).await;
-    let ask_uuid = app.send_queue_command(ask_cmd).await
+    let _ask_uuid = app.send_queue_command(ask_cmd).await
         .map_err(|e| format!("ask_queue_state failed: {}", e))?;
 
     {

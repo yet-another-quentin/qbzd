@@ -980,7 +980,7 @@ impl QobuzClient {
         query.push(("limit", limit.to_string()));
 
         // Derive method name from endpoint path: "/discover/newReleases" -> "discovernewReleases"
-        let method_name = endpoint.replace('/', "").replace('.', "");
+        let method_name = endpoint.replace(['/', '.'], "");
         let http_response = self
             .signed_get_auth(&url, &method_name, &query.iter().map(|(k, v)| (*k, v.clone())).collect::<Vec<_>>())
             .await?;
@@ -1147,7 +1147,7 @@ impl QobuzClient {
     pub async fn get_artist_basic(&self, artist_id: u64) -> Result<Artist> {
         let url = endpoints::build_url(paths::ARTIST_GET);
         let locale = self.locale().await;
-        let query = vec![
+        let query = [
             ("artist_id", artist_id.to_string()),
             ("lang", locale),
             // No "extra" parameter = only basic info (id, name, image)

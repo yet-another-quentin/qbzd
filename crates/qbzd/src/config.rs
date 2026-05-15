@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DaemonConfig {
     #[serde(default)]
     pub server: ServerConfig,
@@ -198,6 +198,7 @@ impl DaemonConfig {
     }
 
     /// Resolve the token — generate if "auto".
+    #[allow(dead_code)]
     pub fn resolve_token(&mut self) {
         if self.token_is_auto() {
             self.server.token = generate_token();
@@ -205,6 +206,7 @@ impl DaemonConfig {
         }
     }
 
+    #[allow(dead_code)]
     pub fn token_is_auto(&self) -> bool {
         self.server.token == "auto" || self.server.token.is_empty()
     }
@@ -215,24 +217,12 @@ impl DaemonConfig {
     }
 
     /// Disk cache size in bytes
+    #[allow(dead_code)]
     pub fn disk_cache_bytes(&self) -> usize {
         self.cache.disk_mb * 1024 * 1024
     }
 }
 
-impl Default for DaemonConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            audio: AudioConfig::default(),
-            cache: CacheConfig::default(),
-            data: DataConfig::default(),
-            qconnect: QConnectConfig::default(),
-            mdns: MdnsConfig::default(),
-            logging: LoggingConfig::default(),
-        }
-    }
-}
 
 /// Generate a random 32-character hex token
 pub fn generate_token() -> String {
@@ -245,6 +235,7 @@ pub fn generate_token() -> String {
 }
 
 /// Save config to the default config path (creates dir if needed).
+#[allow(dead_code)]
 pub fn save_default_config(config: &DaemonConfig) -> Result<(), String> {
     let config_dir = dirs::config_dir()
         .ok_or("Could not determine config directory")?

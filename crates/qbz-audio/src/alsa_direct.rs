@@ -41,8 +41,11 @@ pub struct AlsaDirectStream {
 
 #[cfg(not(target_os = "linux"))]
 pub struct AlsaDirectStream {
+    #[allow(dead_code)]
     sample_rate: u32,
+    #[allow(dead_code)]
     channels: u16,
+    #[allow(dead_code)]
     device_id: String,
 }
 

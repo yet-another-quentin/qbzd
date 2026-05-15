@@ -49,12 +49,13 @@ impl Default for AudioBackendType {
 }
 
 /// ALSA plugin type (only relevant for ALSA backend)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AlsaPlugin {
     /// Direct hardware access (hw)
     /// - Bit-perfect, exclusive
     /// - No automatic format conversion
     /// - Blocks device for other apps
+    #[default]
     Hw,
 
     /// Plug hardware access (plughw)
@@ -69,12 +70,6 @@ pub enum AlsaPlugin {
     Pcm,
 }
 
-impl Default for AlsaPlugin {
-    fn default() -> Self {
-        // Hw is the audiophile choice
-        AlsaPlugin::Hw
-    }
-}
 
 /// Audio device information
 #[derive(Debug, Clone, Serialize, Deserialize)]

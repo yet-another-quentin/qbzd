@@ -13,7 +13,7 @@ pub fn auto_detect_cache_config(config: &mut DaemonConfig) {
 
     if config.cache.auto.enabled && config.cache.memory_mb == 0 {
         // Conservative: 1/8 of RAM, capped at 400 MB, minimum 50 MB
-        let auto_memory = (total_ram_mb / 8).min(400).max(50) as usize;
+        let auto_memory = (total_ram_mb / 8).clamp(50, 400) as usize;
         config.cache.memory_mb = auto_memory;
         log::info!("[qbzd] Auto-detected L1 cache: {} MB", auto_memory);
     }

@@ -240,7 +240,7 @@ impl BufferedMediaSource {
         let (lock, cvar) = &*self.state;
         let mut state = lock
             .lock()
-            .map_err(|_| IoError::new(ErrorKind::Other, "Failed to acquire buffer lock"))?;
+            .map_err(|_| IoError::other("Failed to acquire buffer lock"))?;
 
         while state.data.len() < self.config.initial_buffer_bytes
             && !state.download_complete
@@ -248,11 +248,11 @@ impl BufferedMediaSource {
         {
             state = cvar
                 .wait(state)
-                .map_err(|_| IoError::new(ErrorKind::Other, "Condition variable wait failed"))?;
+                .map_err(|_| IoError::other("Condition variable wait failed"))?;
         }
 
         if let Some(ref err) = state.download_error {
-            return Err(IoError::new(ErrorKind::Other, err.clone()));
+            return Err(IoError::other(err.clone()));
         }
 
         Ok(())
@@ -352,7 +352,7 @@ impl Read for BufferedMediaSource {
         let (lock, cvar) = &*self.state;
         let mut state = lock
             .lock()
-            .map_err(|_| IoError::new(ErrorKind::Other, "Failed to acquire buffer lock"))?;
+            .map_err(|_| IoError::other("Failed to acquire buffer lock"))?;
 
         let read_pos = self.read_pos.load(Ordering::SeqCst) as usize;
 
@@ -363,12 +363,12 @@ impl Read for BufferedMediaSource {
         {
             state = cvar
                 .wait(state)
-                .map_err(|_| IoError::new(ErrorKind::Other, "Condition variable wait failed"))?;
+                .map_err(|_| IoError::other("Condition variable wait failed"))?;
         }
 
         // Check for errors
         if let Some(ref err) = state.download_error {
-            return Err(IoError::new(ErrorKind::Other, err.clone()));
+            return Err(IoError::other(err.clone()));
         }
 
         // EOF if at end and download complete
@@ -394,7 +394,7 @@ impl Seek for BufferedMediaSource {
         let (lock, cvar) = &*self.state;
         let mut state = lock
             .lock()
-            .map_err(|_| IoError::new(ErrorKind::Other, "Failed to acquire buffer lock"))?;
+            .map_err(|_| IoError::other("Failed to acquire buffer lock"))?;
 
         let current_pos = self.read_pos.load(Ordering::SeqCst) as i64;
 
@@ -433,11 +433,11 @@ impl Seek for BufferedMediaSource {
         {
             state = cvar
                 .wait(state)
-                .map_err(|_| IoError::new(ErrorKind::Other, "Condition variable wait failed"))?;
+                .map_err(|_| IoError::other("Condition variable wait failed"))?;
         }
 
         if let Some(ref err) = state.download_error {
-            return Err(IoError::new(ErrorKind::Other, err.clone()));
+            return Err(IoError::other(err.clone()));
         }
 
         // After download complete, check bounds

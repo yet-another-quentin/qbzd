@@ -12,7 +12,7 @@ use futures_util::stream::Stream;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 
-use crate::adapter::{DaemonEvent, PlaybackSnapshot, RuntimeEvent};
+use crate::adapter::DaemonEvent;
 use crate::daemon::DaemonCore;
 
 /// SSE endpoint handler. Each connected client gets its own broadcast receiver.

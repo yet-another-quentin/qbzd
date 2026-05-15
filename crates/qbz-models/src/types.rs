@@ -12,10 +12,11 @@ use std::collections::HashSet;
 // ============ Quality Types ============
 
 /// Audio quality format IDs (matches Qobuz API format IDs)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 #[repr(u32)]
 pub enum Quality {
     Mp3 = 5,
+    #[default]
     Lossless = 6,    // 16-bit/44.1kHz (CD Quality)
     HiRes = 7,       // 24-bit/≤96kHz
     UltraHiRes = 27, // 24-bit/>96kHz
@@ -67,11 +68,7 @@ impl Quality {
     }
 }
 
-impl Default for Quality {
-    fn default() -> Self {
-        Quality::Lossless
-    }
-}
+
 
 // ============ User Session ============
 
@@ -925,9 +922,9 @@ pub struct PageArtistAward {
 /// Qobuz uses three different embedded shapes across endpoints:
 /// - `/discover/index` — {id: int, name, awarded_at: "YYYY-MM-DD"}
 /// - `/album/get`      — LegacyAwardDto {awardId: string, name,
-///                        publicationId, publicationName, awardSlug,
-///                        awardedAt: long, …}
+///   publicationId, publicationName, awardSlug, awardedAt: long, …}
 /// - `/artist/page`    — PageArtistAward {id: int, name, awarded_at}
+///
 /// id is emitted as String downstream so the frontend has a single
 /// type to carry into /award/page and /award/getAlbums. The `alias`
 /// list covers the LegacyAwardDto field name the web app never sees

@@ -27,6 +27,7 @@ pub(crate) struct SourceQueue {
     notify: Condvar,
 }
 
+#[allow(dead_code)]
 impl SourceQueue {
     fn new() -> Self {
         Self {
@@ -69,6 +70,7 @@ pub enum PlaybackEngine {
     /// Rodio-based (PipeWire, Pulse, ALSA via CPAL)
     Rodio { sink: RodioPlayer },
     /// Direct ALSA (hw: devices, bit-perfect) with gapless source queue
+    #[allow(dead_code)]
     AlsaDirect {
         stream: Arc<AlsaDirectStream>,
         is_playing: Arc<AtomicBool>,
@@ -92,6 +94,7 @@ impl PlaybackEngine {
 
     /// Create ALSA Direct engine with gapless source queue.
     /// Spawns a single writer thread that lives for the engine's lifetime.
+    #[allow(dead_code)]
     pub fn new_alsa_direct(stream: Arc<AlsaDirectStream>, hardware_volume: bool) -> Self {
         let is_playing = Arc::new(AtomicBool::new(false));
         let should_stop = Arc::new(AtomicBool::new(false));
@@ -245,14 +248,14 @@ impl PlaybackEngine {
         match self {
             Self::Rodio { sink } => sink.set_volume(volume),
             Self::AlsaDirect {
-                stream,
+                stream: _stream,
                 hardware_volume,
                 ..
             } => {
                 if *hardware_volume {
                     #[cfg(target_os = "linux")]
                     {
-                        if let Err(e) = stream.set_hardware_volume(volume) {
+                        if let Err(e) = _stream.set_hardware_volume(volume) {
                             log::warn!("[ALSA Direct Engine] Hardware volume failed: {}", e);
                         }
                     }
@@ -337,6 +340,8 @@ impl PlaybackEngine {
 /// When a source ends, seamlessly picks up the next one from the queue
 /// (gapless transition). If no next source is available, drains the ALSA
 /// buffer and waits for the next source or a stop signal.
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 fn alsa_writer_thread(
     stream: Arc<AlsaDirectStream>,
     is_playing: Arc<AtomicBool>,

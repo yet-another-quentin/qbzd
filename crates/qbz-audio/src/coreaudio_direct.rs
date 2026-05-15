@@ -175,7 +175,6 @@ pub fn resolve_output_device_name(device_name: Option<&str>) -> Result<String, S
 #[cfg(target_os = "macos")]
 pub fn get_hogging_pid(device_id: AudioDeviceID) -> Result<i32, String> {
     macos_helpers::get_hogging_pid(device_id)
-        .map(|pid| pid as i32)
         .map_err(|e| format!("Failed to query CoreAudio Hog Mode owner: {:?}", e))
 }
 
@@ -201,7 +200,6 @@ pub fn set_hog_mode(device_id: AudioDeviceID, enabled: bool) -> Result<(), Strin
         }
 
         let new_pid = macos_helpers::toggle_hog_mode(device_id)
-            .map(|pid| pid as i32)
             .map_err(|e| format!("Failed to enable CoreAudio Hog Mode: {:?}", e))?;
         if new_pid != our_pid {
             return Err(format!(
@@ -216,7 +214,6 @@ pub fn set_hog_mode(device_id: AudioDeviceID, enabled: bool) -> Result<(), Strin
 
     if current_pid == our_pid {
         let new_pid = macos_helpers::toggle_hog_mode(device_id)
-            .map(|pid| pid as i32)
             .map_err(|e| format!("Failed to release CoreAudio Hog Mode: {:?}", e))?;
         log::info!(
             "[CoreAudio] Hog Mode released for device {} (owner pid now {})",

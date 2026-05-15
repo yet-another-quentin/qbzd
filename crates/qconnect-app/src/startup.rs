@@ -28,7 +28,7 @@ impl QconnectStartupMode {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_config_str(s: &str) -> Option<Self> {
         match s {
             "off" => Some(QconnectStartupMode::Off),
             "on" => Some(QconnectStartupMode::On),
@@ -73,14 +73,14 @@ mod tests {
             QconnectStartupMode::On,
             QconnectStartupMode::RememberLast,
         ] {
-            assert_eq!(QconnectStartupMode::from_str(m.as_str()), Some(m));
+            assert_eq!(QconnectStartupMode::from_config_str(m.as_str()), Some(m));
         }
     }
 
     #[test]
     fn from_str_unknown_value_returns_none() {
-        assert_eq!(QconnectStartupMode::from_str("auto"), None);
-        assert_eq!(QconnectStartupMode::from_str(""), None);
+        assert_eq!(QconnectStartupMode::from_config_str("auto"), None);
+        assert_eq!(QconnectStartupMode::from_config_str(""), None);
     }
 
     #[test]

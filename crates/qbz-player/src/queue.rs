@@ -244,14 +244,14 @@ impl QueueManager {
         if let Some(curr_idx) = state.current_index {
             if index < curr_idx {
                 state.current_index = Some(curr_idx - 1);
-            } else if index == curr_idx {
-                if curr_idx >= state.tracks.len() {
-                    state.current_index = if state.tracks.is_empty() {
-                        None
-                    } else {
-                        Some(state.tracks.len() - 1)
-                    };
-                }
+            } else if index == curr_idx
+                && curr_idx >= state.tracks.len()
+            {
+                state.current_index = if state.tracks.is_empty() {
+                    None
+                } else {
+                    Some(state.tracks.len() - 1)
+                };
             }
         }
 
@@ -306,14 +306,14 @@ impl QueueManager {
         if let Some(curr_idx) = state.current_index {
             if actual_index < curr_idx {
                 state.current_index = Some(curr_idx - 1);
-            } else if actual_index == curr_idx {
-                if curr_idx >= state.tracks.len() {
-                    state.current_index = if state.tracks.is_empty() {
-                        None
-                    } else {
-                        Some(state.tracks.len() - 1)
-                    };
-                }
+            } else if actual_index == curr_idx
+                && curr_idx >= state.tracks.len()
+            {
+                state.current_index = if state.tracks.is_empty() {
+                    None
+                } else {
+                    Some(state.tracks.len() - 1)
+                };
             }
         }
 
@@ -427,7 +427,7 @@ impl QueueManager {
         }
 
         if direction == QueueMoveDirection::Down {
-            to_idx = to_idx - 1;
+            to_idx -= 1;
         }
 
         log::info!(

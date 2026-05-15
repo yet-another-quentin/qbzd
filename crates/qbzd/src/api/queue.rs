@@ -120,6 +120,6 @@ pub async fn repeat(
         "all" => RepeatMode::All,
         _ => RepeatMode::Off,
     };
-    daemon.core.set_repeat_mode(mode.clone()).await;
+    daemon.core.set_repeat_mode(mode).await;
     Json(serde_json::json!({ "repeat": format!("{:?}", mode) }))
 }

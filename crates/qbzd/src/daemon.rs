@@ -34,7 +34,7 @@ pub struct DaemonCore {
 }
 
 /// Run the daemon main loop.
-pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
+pub async fn run(config: DaemonConfig) -> Result<(), String> {
     log::info!("[qbzd] Access: LAN-only (no authentication required on local network)");
 
     // Create event bus (bounded, slow SSE clients get dropped)

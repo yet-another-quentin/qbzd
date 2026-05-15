@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use crate::adapter::{DaemonEvent, RuntimeEvent};
 
 /// Per-user state, populated after successful login.
+#[allow(dead_code)]
 pub struct UserSession {
     pub user_id: u64,
     pub data_dir: PathBuf,
@@ -19,7 +20,7 @@ pub struct UserSession {
 /// Creates per-user directories, initializes stores, syncs audio settings to player.
 pub async fn activate_session(
     user_id: u64,
-    core: &qbz_core::QbzCore<crate::adapter::DaemonAdapter>,
+    _core: &qbz_core::QbzCore<crate::adapter::DaemonAdapter>,
     event_tx: &tokio::sync::broadcast::Sender<DaemonEvent>,
 ) -> Result<UserSession, String> {
     // Demoted from info to debug to keep user_id out of default-level logs
@@ -67,6 +68,7 @@ pub async fn activate_session(
 }
 
 /// Load the last user_id from the marker file (for auto-login session restore).
+#[allow(dead_code)]
 pub fn load_last_user_id() -> Option<u64> {
     let path = dirs::data_dir()?.join("qbz").join("last_user_id");
     std::fs::read_to_string(&path)

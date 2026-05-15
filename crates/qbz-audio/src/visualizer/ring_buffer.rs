@@ -70,11 +70,11 @@ impl RingBuffer {
         unsafe {
             let buffer = &*self.buffer.get();
 
-            for i in 0..len {
+            for (i, dest_sample) in dest.iter_mut().enumerate().take(len) {
                 // Calculate the index for the i-th oldest sample
                 // We want samples from (write_pos - len) to (write_pos - 1)
                 let idx = (write_pos + self.size - len + i) % self.size;
-                dest[i] = buffer[idx];
+                *dest_sample = buffer[idx];
             }
         }
     }

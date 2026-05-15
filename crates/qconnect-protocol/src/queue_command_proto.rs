@@ -1,3 +1,4 @@
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum QConnectMessageType {

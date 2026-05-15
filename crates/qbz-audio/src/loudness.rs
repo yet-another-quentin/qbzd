@@ -159,18 +159,14 @@ fn extract_from_tags(tags: &[Tag], gain_db: &mut Option<f32>, peak: &mut Option<
         // Symphonia might not map to StandardTagKey
         let key_lower = tag.key.to_lowercase();
         match key_lower.as_str() {
-            "replaygain_track_gain" => {
-                if gain_db.is_none() {
-                    if let Some(g) = parse_gain_value(&tag.value) {
-                        *gain_db = Some(g);
-                    }
+            "replaygain_track_gain" if gain_db.is_none() => {
+                if let Some(g) = parse_gain_value(&tag.value) {
+                    *gain_db = Some(g);
                 }
             }
-            "replaygain_track_peak" => {
-                if peak.is_none() {
-                    if let Some(p) = parse_peak_value(&tag.value) {
-                        *peak = Some(p);
-                    }
+            "replaygain_track_peak" if peak.is_none() => {
+                if let Some(p) = parse_peak_value(&tag.value) {
+                    *peak = Some(p);
                 }
             }
             _ => {}

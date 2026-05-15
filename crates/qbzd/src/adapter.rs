@@ -6,7 +6,7 @@ use tokio::sync::broadcast;
 #[derive(Debug, Clone)]
 pub enum DaemonEvent {
     /// Events from qbz-core (track started, queue updated, favorites changed, etc.)
-    Core(qbz_models::CoreEvent),
+    Core(Box<qbz_models::CoreEvent>),
     /// Periodic playback state snapshot (250ms while playing)
     Playback(PlaybackSnapshot),
     /// Runtime lifecycle (login, logout, ready, degraded)
@@ -27,7 +27,9 @@ pub struct PlaybackSnapshot {
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum RuntimeEvent {
     Ready { user_id: u64 },
+    #[allow(dead_code)]
     LoggedOut,
+    #[allow(dead_code)]
     Degraded { reason: String },
 }
 
@@ -46,6 +48,6 @@ impl DaemonAdapter {
 #[async_trait]
 impl FrontendAdapter for DaemonAdapter {
     async fn on_event(&self, event: qbz_models::CoreEvent) {
-        let _ = self.event_tx.send(DaemonEvent::Core(event));
+        let _ = self.event_tx.send(DaemonEvent::Core(Box::new(event)));
     }
 }

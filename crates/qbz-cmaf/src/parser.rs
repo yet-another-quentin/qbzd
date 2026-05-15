@@ -52,11 +52,12 @@ fn find_uuid_box(data: &[u8], target_uuid: &[u8; 16]) -> Option<(usize, usize)> 
         if size < 8 || pos + size > data.len() {
             break;
         }
-        if &data[pos + 4..pos + 8] == b"uuid" && pos + 24 <= data.len() {
-            if &data[pos + 8..pos + 24] == target_uuid.as_ref() {
-                // payload_start = box_start + 8 (header) + 16 (uuid) = box_start + 24
-                return Some((pos + 24, pos + size));
-            }
+        if &data[pos + 4..pos + 8] == b"uuid"
+            && pos + 24 <= data.len()
+            && &data[pos + 8..pos + 24] == target_uuid.as_ref()
+        {
+            // payload_start = box_start + 8 (header) + 16 (uuid) = box_start + 24
+            return Some((pos + 24, pos + size));
         }
         pos += size;
     }

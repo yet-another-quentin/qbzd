@@ -124,7 +124,7 @@ pub async fn play_album(
     daemon.core.set_queue(tracks, Some(start)).await;
 
     // Play the first track
-    let quality = match req.quality.as_deref() {
+    let _quality = match req.quality.as_deref() {
         Some("Hi-Res+") | Some("UltraHiRes") => qbz_models::Quality::UltraHiRes,
         Some("Hi-Res") | Some("HiRes") => qbz_models::Quality::HiRes,
         _ => qbz_models::Quality::HiRes,

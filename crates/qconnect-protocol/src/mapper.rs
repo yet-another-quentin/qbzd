@@ -855,7 +855,7 @@ fn parse_renderer_initial_state(
         current_position: playback_position,
         duration: optional_i32(source, "duration")?,
         queue_version: optional_queue_version(source, "queue_version")?
-            .map(|v| to_proto_queue_version(v))
+            .map(to_proto_queue_version)
             .transpose()?,
         current_queue_item_id: optional_i32(source, "current_queue_item_id")?,
         next_queue_item_id: optional_i32(source, "next_queue_item_id")?,

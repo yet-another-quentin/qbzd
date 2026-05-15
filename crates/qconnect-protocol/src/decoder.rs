@@ -1010,8 +1010,8 @@ fn queue_version_opt(
     };
 
     // Qobuz may send QueueVersionRef with missing major/minor — default to 0
-    let major = version.major.map(|v| i32_to_u64(v)).transpose()?.unwrap_or(0);
-    let minor = version.minor.map(|v| i32_to_u64(v)).transpose()?.unwrap_or(0);
+    let major = version.major.map(i32_to_u64).transpose()?.unwrap_or(0);
+    let minor = version.minor.map(i32_to_u64).transpose()?.unwrap_or(0);
     Ok(Some(QueueVersion::new(major, minor)))
 }
 

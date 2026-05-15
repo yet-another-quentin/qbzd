@@ -10,7 +10,6 @@ members = [
     "qbz-integrations",
     "qbz-cache",
     "qbz-library",
-    "qbz-cast",
     "qbz-cmaf",
     "qbz-secrets",
     "qconnect-core",
@@ -24,7 +23,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/vicrodh/qbz"
+repository = "https://github.com/qbarlas/qbzd"
 
 [workspace.dependencies]
 # Async runtime

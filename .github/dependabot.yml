@@ -1,13 +1,6 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    target-branch: "pre-release"
-
   - package-ecosystem: "cargo"
-    directory: "/src-tauri"
+    directory: "/crates"
     schedule:
       interval: "weekly"
-    target-branch: "pre-release"

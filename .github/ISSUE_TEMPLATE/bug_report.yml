@@ -3,16 +3,6 @@ description: Report something that is not working as expected
 title: "[Bug] "
 labels: ["bug"]
 body:
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      options:
-        - Linux
-        - macOS
-    validations:
-      required: true
-
   - type: textarea
     id: description
     attributes:
@@ -36,7 +26,6 @@ body:
     id: expected
     attributes:
       label: Expected behavior
-      description: What you expected to happen.
     validations:
       required: true
 
@@ -44,15 +33,14 @@ body:
     id: actual
     attributes:
       label: Actual behavior
-      description: What actually happened.
     validations:
       required: true
 
   - type: input
     id: version
     attributes:
-      label: QBZ version
-      placeholder: e.g. v1.2.0
+      label: qbzd version
+      placeholder: e.g. v0.2.0 or git SHA
     validations:
       required: true
 
@@ -61,47 +49,17 @@ body:
     attributes:
       label: Installation method
       options:
-        - AppImage
-        - .deb
-        - .rpm
-        - AUR
-        - Gentoo overlay
-        - Tarball
-        - Flatpak
-        - DMG (macOS)
-        - Built from source
+        - Docker
+        - Binary (built from source)
+        - Binary (GitHub release)
     validations:
       required: true
 
   - type: input
-    id: distro
+    id: host
     attributes:
-      label: Distribution / macOS version
-      description: Linux distro or macOS version.
-      placeholder: e.g. Arch Linux, Ubuntu 24.04, Fedora 43, macOS 15.3 Sequoia
-
-  - type: input
-    id: de
-    attributes:
-      label: Desktop environment / WM
-      description: Linux only.
-      placeholder: e.g. KDE Plasma 6, GNOME 46
-
-  - type: dropdown
-    id: display
-    attributes:
-      label: Display server
-      description: Linux only.
-      options:
-        - Wayland
-        - X11
-        - N/A (macOS)
-
-  - type: input
-    id: gpu
-    attributes:
-      label: GPU
-      placeholder: e.g. NVIDIA RTX 3070, AMD RX 6600 XT, Apple M3
+      label: Host OS / distribution
+      placeholder: e.g. Debian 12, Ubuntu 24.04, ProxMox 8
 
   - type: dropdown
     id: audio_backend
@@ -109,43 +67,19 @@ body:
       label: Audio backend
       options:
         - PipeWire
-        - ALSA Direct
+        - ALSA
         - PulseAudio
-        - System Default (macOS)
-        - Auto
 
   - type: input
-    id: dac
+    id: audio_device
     attributes:
       label: Audio device / DAC
-      placeholder: e.g. Schiit Bifrost 2, FiiO K17
+      placeholder: e.g. Schiit Modi 3, onboard HDA
 
   - type: textarea
     id: logs
     attributes:
       label: Logs
       description: |
-        Logs help us diagnose problems much faster.
-
-        1. Open **Settings > Developer Mode > View Logs**
-        2. Click **Upload** on both the **Terminal** and **Console** tabs
-        3. Paste both URLs here
-
-        **If QBZ crashes on startup**, run from terminal:
-        `flatpak run com.blitzfc.qbz 2>&1 | tee /tmp/qbz-crash.log`
-        Then upload: `curl -F'file=@/tmp/qbz-crash.log' https://0x0.st`
-      value: |
-        - Terminal log URL:
-        - Console log URL:
-
-  - type: textarea
-    id: screenshots
-    attributes:
-      label: Screenshots
-      description: If applicable, add screenshots to help illustrate the issue.
-
-  - type: textarea
-    id: context
-    attributes:
-      label: Additional context
-      description: Anything else that may help reproduce or understand the issue.
+        Run with `--log-level debug` and paste the relevant output.
+        In Docker: `docker logs qbzd`

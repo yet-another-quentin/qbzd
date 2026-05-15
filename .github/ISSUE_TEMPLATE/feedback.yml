@@ -1,24 +1,12 @@
 name: Feedback
-description: General feedback, UX thoughts, or non-bug discussion
+description: General feedback or non-bug discussion
 title: "[Feedback] "
 labels: ["feedback"]
 body:
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      options:
-        - ""
-        - Linux
-        - macOS
-    validations:
-      required: false
-
   - type: textarea
     id: feedback
     attributes:
       label: Feedback
-      description: Share your thoughts, impressions, or experience using QBZ.
     validations:
       required: true
 
@@ -35,33 +23,5 @@ body:
   - type: input
     id: version
     attributes:
-      label: QBZ version (optional)
-      placeholder: e.g. v1.2.0
-
-  - type: dropdown
-    id: install
-    attributes:
-      label: Installation method (optional)
-      options:
-        - ""
-        - AppImage
-        - .deb
-        - .rpm
-        - AUR
-        - Gentoo overlay
-        - Tarball
-        - Flatpak
-        - DMG (macOS)
-        - Built from source
-
-  - type: input
-    id: distro
-    attributes:
-      label: Distribution / macOS version (optional)
-      placeholder: e.g. Arch Linux, Ubuntu 24.04, macOS 15.3 Sequoia
-
-  - type: textarea
-    id: notes
-    attributes:
-      label: Additional notes
-      description: Anything else you'd like to share.
+      label: qbzd version (optional)
+      placeholder: e.g. v0.2.0

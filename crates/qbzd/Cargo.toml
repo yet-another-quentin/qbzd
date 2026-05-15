@@ -16,9 +16,7 @@ qbz-core = { path = "../qbz-core" }
 qbz-player = { path = "../qbz-player" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-qobuz = { path = "../qbz-qobuz" }
-qbz-library = { path = "../qbz-library" }
 qbz-cache = { path = "../qbz-cache" }
-qbz-integrations = { path = "../qbz-integrations" }
 qconnect-app = { path = "../qconnect-app" }
 qconnect-transport-ws = { path = "../qconnect-transport-ws" }
 
@@ -69,9 +67,3 @@ uuid = { version = "1", features = ["v4"] }
 # QConnect core types
 qconnect-core = { path = "../qconnect-core" }
 
-# MPRIS media controls (Linux D-Bus, headless)
-souvlaki = "0.8"
-
-# TUI wizard
-ratatui = "0.29"
-crossterm = "0.28"

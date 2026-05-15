@@ -57,8 +57,6 @@ backend = "pipewire"   # pipewire | alsa | pulse
 enabled     = true
 device_name = "Living Room"   # name shown in Qobuz app
 
-[mpris]
-enabled = false   # disable when running without D-Bus desktop session
 ```
 
 A default config is baked into the image at `/etc/qbz/qbzd.toml.default`.
@@ -88,19 +86,15 @@ volumes:
 
 The daemon exposes a local REST API on port 8182.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/ping` | Health check |
-| `GET` | `/api/status` | Daemon status (logged in, qconnect active, playback state) |
-| `POST` | `/api/auth/oauth/start` | Start OAuth flow → returns `oauth_url` |
-| `GET` | `/api/auth/oauth/callback` | OAuth redirect handler (called by Qobuz) |
-| `GET` | `/api/auth/oauth/status` | Poll login status (`idle` / `pending` / `success` / `error`) |
-| `POST` | `/api/auth/token` | Authenticate with a direct `user_auth_token` |
-| `GET` | `/api/playback/state` | Current playback state |
-| `POST` | `/api/playback/play` | Play |
-| `POST` | `/api/playback/pause` | Pause |
-| `POST` | `/api/playback/next` | Skip to next track |
-| `POST` | `/api/playback/prev` | Skip to previous track |
+| Group | Endpoints |
+|-------|-----------|
+| Auth | `POST /api/auth/oauth/start` · `GET /api/auth/oauth/callback` · `GET /api/auth/oauth/status` · `POST /api/auth/token` |
+| System | `GET /api/ping` · `GET /api/status` · `GET /api/info` · `GET /api/events` (SSE) · `GET /api/system/resources` · `DELETE /api/cache` |
+| Playback | `GET /api/playback` · play · pause · stop · next · previous · seek · volume |
+| Queue | `GET /api/queue` · set · add · add-next · play-index · remove · move · clear · shuffle · repeat |
+| Audio | `GET/PATCH /api/audio/settings` · backends · devices · hardware-status |
+
+Full spec: `docs/openapi.yaml`
 
 ---
 
@@ -133,8 +127,7 @@ crates/
   qbz-qobuz/              Qobuz API client and OAuth
   qbz-models/             Shared domain types
   qbz-cache/              Audio cache (memory + disk)
-  qbz-library/            Local file library (unused in daemon mode)
-  qbz-integrations/       Last.fm, ListenBrainz (optional)
+  qbz-cmaf/               CMAF/MP4 fragment parser (used by qbz-qobuz)
   qconnect-protocol/      Qobuz Connect protobuf wire format
   qconnect-core/          Queue and renderer state machines
   qconnect-app/           QConnect application logic

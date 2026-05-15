@@ -131,24 +131,11 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
         }
     }
 
-    // Start MPRIS media controls (Linux D-Bus, headless)
-    let mpris_handle = if config.mpris.enabled {
-        crate::mpris::start_mpris(daemon.core.clone())
-    } else {
-        log::info!("[qbzd] MPRIS disabled via config");
-        None
-    };
-
-    // Start playback state polling loop (broadcasts to event bus + MPRIS)
-    spawn_playback_loop(daemon.core.clone(), daemon.event_bus.clone(), mpris_handle.clone());
+    // Start playback state polling loop (broadcasts to event bus)
+    spawn_playback_loop(daemon.core.clone(), daemon.event_bus.clone());
 
     // Playback orchestrator: auto-advance, gapless pre-queue, repeat modes
     spawn_playback_orchestrator(daemon.clone());
-
-    // Spawn MPRIS metadata updater (listens to event bus for TrackStarted)
-    if let Some(ref mc) = mpris_handle {
-        spawn_mpris_metadata_updater(daemon.event_bus.subscribe(), mc.clone());
-    }
 
     // Register mDNS service for LAN discovery
     let _mdns_handle = if config.mdns.enabled {
@@ -435,48 +422,12 @@ fn register_mdns(config: &DaemonConfig) -> Result<mdns_sd::ServiceDaemon, String
     Ok(mdns)
 }
 
-/// Listen for CoreEvent::TrackStarted on the event bus and update MPRIS metadata.
-fn spawn_mpris_metadata_updater(
-    mut rx: broadcast::Receiver<DaemonEvent>,
-    mc: Arc<std::sync::Mutex<souvlaki::MediaControls>>,
-) {
-    tokio::spawn(async move {
-        loop {
-            match rx.recv().await {
-                Ok(DaemonEvent::Core(qbz_models::CoreEvent::TrackStarted { track, .. })) => {
-                    crate::mpris::update_mpris_metadata(
-                        &mc,
-                        &track.title,
-                        &track.artist,
-                        &track.album,
-                        track.duration_secs,
-                    );
-                    log::debug!("[qbzd/mpris] Metadata: {} - {}", track.artist, track.title);
-                }
-                Ok(DaemonEvent::Core(qbz_models::CoreEvent::LoggedOut)) => {
-                    // Clear metadata on logout
-                    if let Ok(mut controls) = mc.lock() {
-                        let _ = controls.set_playback(souvlaki::MediaPlayback::Stopped);
-                    }
-                }
-                Err(broadcast::error::RecvError::Lagged(n)) => {
-                    log::debug!("[qbzd/mpris] Lagged {} events", n);
-                }
-                Err(broadcast::error::RecvError::Closed) => break,
-                _ => {}
-            }
-        }
-    });
-}
-
 /// Spawn the playback state polling loop.
 /// Reads player state and broadcasts PlaybackSnapshot events.
-/// Also updates MPRIS metadata when track changes.
 /// Adaptive polling: 250ms playing, 1s paused, 5s idle.
 fn spawn_playback_loop(
     core: Arc<QbzCore<DaemonAdapter>>,
     event_tx: broadcast::Sender<DaemonEvent>,
-    mpris: Option<Arc<std::sync::Mutex<souvlaki::MediaControls>>>,
 ) {
     tokio::spawn(async move {
         let mut last_position: u64 = 0;
@@ -519,21 +470,6 @@ fn spawn_playback_loop(
                     bit_depth,
                 };
                 let _ = event_tx.send(DaemonEvent::Playback(snapshot));
-
-                // Update MPRIS
-                if let Some(ref mc) = mpris {
-                    if track_id != last_track_id && track_id != 0 {
-                        // Track changed — update metadata
-                        // We don't have track title here (just ID), so use a
-                        // placeholder. Full metadata comes from CoreEvent::TrackStarted.
-                        crate::mpris::update_mpris_playback(mc, is_playing, position);
-                    } else {
-                        crate::mpris::update_mpris_playback(mc, is_playing, position);
-                    }
-                    if track_id == 0 && last_track_id != 0 {
-                        crate::mpris::update_mpris_playback(mc, false, 0);
-                    }
-                }
 
                 last_position = position;
                 last_is_playing = is_playing;
@@ -583,9 +519,9 @@ macro_rules! with_daemon {
 
 /// Build the Axum HTTP router.
 fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
-    use axum::routing::{get, post, patch, put, delete};
+    use axum::routing::{get, post, patch, delete};
     use axum::middleware as axum_mw;
-    use crate::api::{auth, audio, catalog, catalog_ext, discover, favorites, integrations, library, middleware, playback, playlists, queue, search, system};
+    use crate::api::{auth, audio, middleware, playback, queue, system};
 
     axum::Router::new()
         // Auth — OAuth callback on daemon port + direct token
@@ -620,59 +556,12 @@ fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
         .route("/api/queue/clear", post(with_daemon!(daemon, queue::clear)))
         .route("/api/queue/shuffle", post(with_daemon!(daemon, queue::shuffle, json)))
         .route("/api/queue/repeat", post(with_daemon!(daemon, queue::repeat, json)))
-        // Search
-        .route("/api/search", get(with_daemon!(daemon, search::search, query)))
-        // Catalog
-        .route("/api/albums/{id}", get(with_daemon!(daemon, catalog::get_album, path)))
-        .route("/api/artists/{id}", get(with_daemon!(daemon, catalog::get_artist, path)))
-        .route("/api/tracks/{id}", get(with_daemon!(daemon, catalog::get_track, path)))
-        .route("/api/tracks/batch", get(with_daemon!(daemon, catalog::get_tracks_batch, query)))
         // Audio settings
         .route("/api/audio/settings", get(with_daemon!(daemon, audio::get_settings)))
         .route("/api/audio/settings", patch(with_daemon!(daemon, audio::update_settings, json)))
         .route("/api/audio/backends", get(with_daemon!(daemon, audio::get_backends)))
         .route("/api/audio/devices", get(with_daemon!(daemon, audio::get_devices, query)))
         .route("/api/audio/hardware-status", get(with_daemon!(daemon, audio::get_hardware_status)))
-        // Discover / Home
-        .route("/api/discover", get(with_daemon!(daemon, discover::get_discover_index, query)))
-        .route("/api/discover/playlists", get(with_daemon!(daemon, discover::get_discover_playlists, query)))
-        .route("/api/discover/featured", get(with_daemon!(daemon, discover::get_featured, query)))
-        .route("/api/genres", get(with_daemon!(daemon, discover::get_genres)))
-        // Favorites
-        .route("/api/favorites", get(with_daemon!(daemon, favorites::get_favorites, query)))
-        .route("/api/favorites", post(with_daemon!(daemon, favorites::add_favorite, json)))
-        .route("/api/favorites", delete(with_daemon!(daemon, favorites::remove_favorite, json)))
-        // Playlists
-        .route("/api/playlists", get(with_daemon!(daemon, playlists::get_playlists)))
-        .route("/api/playlists", post(with_daemon!(daemon, playlists::create_playlist, json)))
-        .route("/api/playlists/search", get(with_daemon!(daemon, playlists::search_playlists, query)))
-        .route("/api/playlists/{id}", get(with_daemon!(daemon, playlists::get_playlist, path)))
-        .route("/api/playlists/{id}", put(with_daemon!(daemon, playlists::update_playlist, path_json)))
-        .route("/api/playlists/{id}", delete(with_daemon!(daemon, playlists::delete_playlist, path)))
-        .route("/api/playlists/{id}/tracks", post(with_daemon!(daemon, playlists::add_tracks, path_json)))
-        .route("/api/playlists/{id}/tracks", delete(with_daemon!(daemon, playlists::remove_tracks, path_json)))
-        // Extended catalog
-        .route("/api/artists/{id}/page", get(with_daemon!(daemon, catalog_ext::get_artist_page, path)))
-        .route("/api/artists/{id}/similar", get(with_daemon!(daemon, catalog_ext::get_similar_artists, path_query)))
-        .route("/api/labels/{id}", get(with_daemon!(daemon, catalog_ext::get_label, path_query)))
-        .route("/api/labels/{id}/page", get(with_daemon!(daemon, catalog_ext::get_label_page, path)))
-        .route("/api/labels/explore", get(with_daemon!(daemon, catalog_ext::get_label_explore, query)))
-        .route("/api/playlist-tags", get(with_daemon!(daemon, catalog_ext::get_playlist_tags)))
-        // Library (local files)
-        .route("/api/library/albums", get(with_daemon!(daemon, library::get_albums)))
-        .route("/api/library/artists", get(with_daemon!(daemon, library::get_artists)))
-        .route("/api/library/albums/{key}/tracks", get(with_daemon!(daemon, library::get_album_tracks, path)))
-        .route("/api/library/search", get(with_daemon!(daemon, library::search_library, query)))
-        .route("/api/library/stats", get(with_daemon!(daemon, library::get_stats)))
-        .route("/api/library/folders", get(with_daemon!(daemon, library::get_folders)))
-        .route("/api/library/folders", post(with_daemon!(daemon, library::add_folder, json)))
-        .route("/api/library/folders", delete(with_daemon!(daemon, library::remove_folder, json)))
-        .route("/api/library/scan", post(with_daemon!(daemon, library::start_scan)))
-        // Integrations
-        .route("/api/integrations/listenbrainz", get(with_daemon!(daemon, integrations::get_listenbrainz_status)))
-        .route("/api/integrations/listenbrainz/connect", post(with_daemon!(daemon, integrations::connect_listenbrainz, json)))
-        .route("/api/integrations/listenbrainz", delete(with_daemon!(daemon, integrations::disconnect_listenbrainz)))
-        .route("/api/integrations/lastfm", get(with_daemon!(daemon, integrations::get_lastfm_status)))
         // System / Resources
         .route("/api/system/resources", get(with_daemon!(daemon, system::get_resources)))
         .route("/api/cache", delete(with_daemon!(daemon, system::clear_cache)))

@@ -3,10 +3,8 @@ mod config;
 mod daemon;
 mod adapter;
 mod login;
-mod mpris;
 mod qconnect;
 mod resources;
-mod wizard;
 mod session;
 
 use clap::{Parser, Subcommand};
@@ -34,10 +32,6 @@ struct Cli {
     /// Auth token (auto-generated if not provided)
     #[arg(long)]
     token: Option<String>,
-
-    /// Disable MPRIS/D-Bus integration
-    #[arg(long)]
-    no_mpris: bool,
 
     /// Log level
     #[arg(long, default_value = "info")]
@@ -67,12 +61,6 @@ enum Commands {
     Status,
     /// Show or regenerate API token
     Token,
-    /// Interactive setup wizard (audio, playback, integrations)
-    Setup {
-        /// Run only a specific section (audio, playback, cache, integrations, qconnect)
-        #[arg(long)]
-        section: Option<String>,
-    },
 }
 
 #[tokio::main]
@@ -108,7 +96,6 @@ async fn main() {
     if let Some(ref token) = cli.token {
         cfg.server.token = token.clone();
     }
-    cfg.mpris.enabled = !cli.no_mpris;
 
     // Generate token and exit
     if cli.generate_token {
@@ -147,12 +134,6 @@ async fn main() {
                 Err(_) => {
                     println!("qbzd not running (no response on port {})", port);
                 }
-            }
-        }
-        Some(Commands::Setup { section }) => {
-            if let Err(e) = wizard::run(section.as_deref()) {
-                eprintln!("Setup wizard error: {}", e);
-                std::process::exit(1);
             }
         }
         Some(Commands::Token) => {

@@ -25,9 +25,6 @@ enabled = true
 [data]
 dir = "/var/lib/qbzd"
 
-[mpris]
-enabled = false     # zbus/tokio conflict dans un container headless
-
 [qconnect]
 enabled = true
 device_name = ""        # vide = hostname du container

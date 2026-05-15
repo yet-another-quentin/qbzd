@@ -12,8 +12,6 @@ pub struct DaemonConfig {
     #[serde(default)]
     pub data: DataConfig,
     #[serde(default)]
-    pub mpris: MprisConfig,
-    #[serde(default)]
     pub qconnect: QConnectConfig,
     #[serde(default)]
     pub mdns: MdnsConfig,
@@ -114,17 +112,6 @@ impl Default for DataConfig {
             .to_string_lossy()
             .to_string();
         Self { dir: default_dir }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MprisConfig {
-    pub enabled: bool,
-}
-
-impl Default for MprisConfig {
-    fn default() -> Self {
-        Self { enabled: true }
     }
 }
 
@@ -240,7 +227,6 @@ impl Default for DaemonConfig {
             audio: AudioConfig::default(),
             cache: CacheConfig::default(),
             data: DataConfig::default(),
-            mpris: MprisConfig::default(),
             qconnect: QConnectConfig::default(),
             mdns: MdnsConfig::default(),
             logging: LoggingConfig::default(),

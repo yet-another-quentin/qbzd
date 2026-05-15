@@ -35,14 +35,18 @@ cargo run -p qbzd -- login
 
 ```
 crates/
-  qbzd/          Daemon binary — HTTP API, CLI, auth, QConnect bridge
-  qbz-core/      Orchestrator (player + audio + Qobuz API)
-  qbz-player/    Playback engine
-  qbz-audio/     Audio backends (PipeWire, ALSA, PulseAudio)
-  qbz-qobuz/     Qobuz API client and OAuth
-  qbz-models/    Shared domain types
-  qbz-cache/     Audio cache
-  qconnect-*/    Qobuz Connect protocol stack
+  qbzd/                   Daemon binary — HTTP API, CLI, auth, QConnect bridge
+  qbz-core/               Orchestrator (player + audio + Qobuz API)
+  qbz-player/             Playback engine, queue, streaming
+  qbz-audio/              Audio backends (PipeWire, ALSA, PulseAudio)
+  qbz-qobuz/              Qobuz API client and OAuth
+  qbz-models/             Shared domain types
+  qbz-cache/              Audio cache (memory + disk)
+  qbz-cmaf/               CMAF/MP4 fragment parser (used by qbz-qobuz)
+  qconnect-protocol/      Qobuz Connect protobuf wire format
+  qconnect-core/          Queue and renderer state machines
+  qconnect-app/           QConnect application logic and orchestration
+  qconnect-transport-ws/  WebSocket transport with qcloud framing
 ```
 
 ## Checks before submitting

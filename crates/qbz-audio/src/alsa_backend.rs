@@ -37,16 +37,16 @@ const COMMON_SAMPLE_RATES: &[u32] = &[
 /// 44.1kHz family: 44100, 88200, 176400, 352800
 /// 48kHz family: 48000, 96000, 192000, 384000
 fn find_best_fallback_rate(requested: u32, supported: &[u32]) -> u32 {
-    let is_441_family = requested % 44100 == 0;
+    let is_441_family = requested.is_multiple_of(44100);
 
     // Find highest supported rate in the same family that's <= requested
     let mut candidates: Vec<u32> = supported
         .iter()
         .filter(|&&r| {
             if is_441_family {
-                r % 44100 == 0
+                r.is_multiple_of(44100)
             } else {
-                r % 48000 == 0
+                r.is_multiple_of(48000)
             }
         })
         .filter(|&&r| r <= requested)
@@ -477,7 +477,7 @@ impl AlsaBackend {
         // Add system default device
         let default_sample_rates = cpal_devices
             .get("default")
-            .and_then(|d| get_supported_sample_rates(d));
+            .and_then(get_supported_sample_rates);
         let default_max_rate = default_sample_rates
             .as_ref()
             .and_then(|rates| rates.iter().max().copied());
@@ -499,7 +499,7 @@ impl AlsaBackend {
             let sysdefault_id = format!("sysdefault:CARD={}", card.short_name);
             let sysdefault_rates = cpal_devices
                 .get(&sysdefault_id)
-                .and_then(|d| get_supported_sample_rates(d));
+                .and_then(get_supported_sample_rates);
 
             devices.push(AudioDevice {
                 id: sysdefault_id.clone(),
@@ -542,7 +542,7 @@ impl AlsaBackend {
                 // Try to get sample rates from CPAL (may fail if device is busy)
                 let sample_rates = cpal_devices
                     .get(&device_id)
-                    .and_then(|d| get_supported_sample_rates(d));
+                    .and_then(get_supported_sample_rates);
                 let max_rate = sample_rates
                     .as_ref()
                     .and_then(|r| r.iter().max().copied())

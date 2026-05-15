@@ -155,9 +155,9 @@ impl PipeWireBackend {
             .iter()
             .filter(|&&r| {
                 if is_441_family {
-                    r % 44100 == 0
+                    r.is_multiple_of(44100)
                 } else {
-                    r % 48000 == 0
+                    r.is_multiple_of(48000)
                 }
             })
             .filter(|&&r| r <= requested)

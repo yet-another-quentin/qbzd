@@ -223,7 +223,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error");
@@ -252,7 +252,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error");
@@ -279,7 +279,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error");
@@ -318,7 +318,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error (S24_3LE)");
@@ -348,7 +348,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error");
@@ -388,7 +388,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error");
@@ -420,7 +420,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error");
@@ -456,7 +456,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error");
@@ -493,7 +493,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error (S24_3LE)");
@@ -523,7 +523,7 @@ impl AlsaDirectStream {
                         Ok(())
                     }
                     Err(e) => {
-                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                        if let Err(recover_err) = pcm.recover(e.errno(), false) {
                             Err(format!("Failed to recover from error: {}", recover_err))
                         } else {
                             log::warn!("[ALSA Direct] Recovered from PCM error");

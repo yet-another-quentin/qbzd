@@ -374,6 +374,9 @@ echo    "  To update qbzd:"
 echo -e "    ${BF}pct exec $CTID -- qbzd-update${CL}           # latest"
 echo -e "    ${BF}pct exec $CTID -- qbzd-update nightly${CL}   # nightly"
 echo
+echo    "  Auto start/stop with DAC (optional):"
+echo -e "    ${BF}bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-dac-watch.sh)${CL}"
+echo
 if [[ "$AUDIO" == "none" ]]; then
     echo -e "  ${YW}⚠ No audio backend configured.${CL}"
     echo    "    Edit /etc/qbz/qbzd.toml, then: pct exec $CTID -- systemctl restart qbzd"

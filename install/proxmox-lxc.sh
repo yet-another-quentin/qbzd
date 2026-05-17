@@ -165,8 +165,6 @@ fi
 mkdir -p /var/lib/qbzd/config /etc/qbz
 chown -R qbzd:qbzd /var/lib/qbzd
 
-echo 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"' \
-    > /etc/profile.d/local-path.sh
 
 if [[ "\$CHANNEL" == "latest" ]]; then
     BINARY_URL="https://github.com/qbarlas/qbzd/releases/latest/download/qbzd-linux-\${ARCH}"
@@ -176,6 +174,7 @@ fi
 echo "Downloading from \$BINARY_URL..."
 curl -fsSL "\$BINARY_URL" -o /usr/local/bin/qbzd
 chmod +x /usr/local/bin/qbzd
+ln -sf /usr/local/bin/qbzd /usr/bin/qbzd
 
 cat > /etc/qbz/qbzd.toml <<TOML
 [server]
@@ -300,6 +299,7 @@ fi
 SELECTEOF
 
 pct exec "$CTID" -- chmod +x /usr/local/sbin/qbzd-select-audio
+pct exec "$CTID" -- ln -sf /usr/local/sbin/qbzd-select-audio /usr/bin/qbzd-select-audio
 ok "qbzd-select-audio installed."
 
 # ── Install the update helper ─────────────────────────────────────────────────
@@ -338,6 +338,7 @@ fi
 UPDATEEOF
 
 pct exec "$CTID" -- chmod +x /usr/local/sbin/qbzd-update
+pct exec "$CTID" -- ln -sf /usr/local/sbin/qbzd-update /usr/bin/qbzd-update
 ok "qbzd-update installed."
 
 # ── Audio device selection ────────────────────────────────────────────────────
@@ -367,11 +368,11 @@ echo    "  HTTP API:"
 echo -e "    ${BF}http://${CT_IP}:8182/api/status${CL}"
 echo
 echo    "  To change the DAC later:"
-echo -e "    ${BF}pct exec $CTID -- /usr/local/sbin/qbzd-select-audio${CL}"
+echo -e "    ${BF}pct exec $CTID -- qbzd-select-audio${CL}"
 echo
 echo    "  To update qbzd:"
-echo -e "    ${BF}pct exec $CTID -- /usr/local/sbin/qbzd-update${CL}           # latest"
-echo -e "    ${BF}pct exec $CTID -- /usr/local/sbin/qbzd-update nightly${CL}   # nightly"
+echo -e "    ${BF}pct exec $CTID -- qbzd-update${CL}           # latest"
+echo -e "    ${BF}pct exec $CTID -- qbzd-update nightly${CL}   # nightly"
 echo
 if [[ "$AUDIO" == "none" ]]; then
     echo -e "  ${YW}⚠ No audio backend configured.${CL}"

@@ -5,7 +5,7 @@
 #   bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-lxc.sh)
 #
 # Environment overrides:
-#   CTID=200 MEMORY=512 DISK=4 STORAGE=local-lvm AUDIO=alsa bash <(...)
+#   CTID=200 MEMORY=512 DISK=4 STORAGE=local-lvm AUDIO=alsa CHANNEL=nightly bash <(...)
 
 set -euo pipefail
 
@@ -32,6 +32,8 @@ BRIDGE="${BRIDGE:-vmbr0}"
 STORAGE="${STORAGE:-local-lvm}"
 # Audio backend: alsa | pipewire | none
 AUDIO="${AUDIO:-alsa}"
+# Release channel: latest | nightly (or any tag name)
+CHANNEL="${CHANNEL:-latest}"
 # For PipeWire: UID of the host user owning the socket
 PIPEWIRE_HOST_UID="${PIPEWIRE_HOST_UID:-1000}"
 
@@ -44,6 +46,7 @@ echo    "  RAM / Disk    : ${MEMORY} MB / ${DISK} GB"
 echo    "  Storage       : $STORAGE"
 echo    "  Arch          : $ARCH"
 echo    "  Audio         : $AUDIO"
+echo    "  Channel       : $CHANNEL"
 echo
 read -r -p "  Continue? [Y/n] " _confirm
 [[ "${_confirm:-Y}" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
@@ -135,6 +138,7 @@ pct exec "$CTID" -- bash -euo pipefail <<INNEREOF
 export DEBIAN_FRONTEND=noninteractive
 ARCH="${ARCH}"
 AUDIO="${AUDIO}"
+CHANNEL="${CHANNEL}"
 
 apt-get update -qq
 apt-get install -y --no-install-recommends \
@@ -153,7 +157,11 @@ fi
 mkdir -p /var/lib/qbzd/config /etc/qbz
 chown -R qbzd:qbzd /var/lib/qbzd
 
-BINARY_URL="https://github.com/qbarlas/qbzd/releases/latest/download/qbzd-linux-\${ARCH}"
+if [[ "\$CHANNEL" == "latest" ]]; then
+    BINARY_URL="https://github.com/qbarlas/qbzd/releases/latest/download/qbzd-linux-\${ARCH}"
+else
+    BINARY_URL="https://github.com/qbarlas/qbzd/releases/download/\${CHANNEL}/qbzd-linux-\${ARCH}"
+fi
 echo "Downloading from \$BINARY_URL..."
 curl -fsSL "\$BINARY_URL" -o /usr/local/bin/qbzd
 chmod +x /usr/local/bin/qbzd

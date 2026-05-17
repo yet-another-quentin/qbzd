@@ -165,6 +165,9 @@ fi
 mkdir -p /var/lib/qbzd/config /etc/qbz
 chown -R qbzd:qbzd /var/lib/qbzd
 
+echo 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"' \
+    > /etc/profile.d/local-path.sh
+
 if [[ "\$CHANNEL" == "latest" ]]; then
     BINARY_URL="https://github.com/qbarlas/qbzd/releases/latest/download/qbzd-linux-\${ARCH}"
 else
@@ -299,6 +302,44 @@ SELECTEOF
 pct exec "$CTID" -- chmod +x /usr/local/sbin/qbzd-select-audio
 ok "qbzd-select-audio installed."
 
+# ── Install the update helper ─────────────────────────────────────────────────
+msg "Installing qbzd-update..."
+pct exec "$CTID" -- tee /usr/local/sbin/qbzd-update > /dev/null << 'UPDATEEOF'
+#!/usr/bin/env bash
+# Update the qbzd binary.
+# Usage: qbzd-update [latest|nightly]  (default: latest)
+
+set -euo pipefail
+
+CHANNEL="${1:-latest}"
+ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+GN="\033[32m" RD="\033[31m" BL="\033[36m" CL="\033[0m" BF="\033[1m"
+msg() { echo -e "${BL}▶${CL} $*"; }
+ok()  { echo -e "${GN}✔${CL} $*"; }
+die() { echo -e "${RD}✘${CL} $*" >&2; exit 1; }
+
+if [[ "$CHANNEL" == "latest" ]]; then
+    URL="https://github.com/qbarlas/qbzd/releases/latest/download/qbzd-linux-${ARCH}"
+else
+    URL="https://github.com/qbarlas/qbzd/releases/download/${CHANNEL}/qbzd-linux-${ARCH}"
+fi
+
+msg "Downloading qbzd (${CHANNEL}, ${ARCH})..."
+curl -fsSL "$URL" -o /usr/local/bin/qbzd.new \
+    || die "Download failed: $URL"
+chmod +x /usr/local/bin/qbzd.new
+mv /usr/local/bin/qbzd.new /usr/local/bin/qbzd
+ok "Binary updated."
+
+if systemctl is-active --quiet qbzd 2>/dev/null; then
+    systemctl restart qbzd
+    ok "qbzd restarted."
+fi
+UPDATEEOF
+
+pct exec "$CTID" -- chmod +x /usr/local/sbin/qbzd-update
+ok "qbzd-update installed."
+
 # ── Audio device selection ────────────────────────────────────────────────────
 if [[ "$AUDIO" == "alsa" ]]; then
     echo
@@ -327,6 +368,10 @@ echo -e "    ${BF}http://${CT_IP}:8182/api/status${CL}"
 echo
 echo    "  To change the DAC later:"
 echo -e "    ${BF}pct exec $CTID -- /usr/local/sbin/qbzd-select-audio${CL}"
+echo
+echo    "  To update qbzd:"
+echo -e "    ${BF}pct exec $CTID -- /usr/local/sbin/qbzd-update${CL}           # latest"
+echo -e "    ${BF}pct exec $CTID -- /usr/local/sbin/qbzd-update nightly${CL}   # nightly"
 echo
 if [[ "$AUDIO" == "none" ]]; then
     echo -e "  ${YW}⚠ No audio backend configured.${CL}"

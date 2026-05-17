@@ -276,7 +276,7 @@ while IFS= read -r line; do
     HW_IDS[$i]="hw:${SHORT},${DEV_NUM}"
     HW_LABELS[$i]="${LONG} — ${DEV_LONG}  (hw:${CARD_NUM},${DEV_NUM})"
     echo "  [$i] ${HW_LABELS[$i]}"
-    ((i++))
+    i=$((i + 1))
 done <<< "$CARDS_RAW"
 echo
 

@@ -97,6 +97,14 @@ lxc.cgroup2.devices.allow: c ${ALSA_MAJOR}:* rwm
 lxc.mount.entry: /dev/snd dev/snd none bind,optional,create=dir
 EOF
         ok "ALSA passthrough configured."
+        echo
+        warn "Unprivileged containers cannot access /dev/snd by default."
+        warn "If qbzd fails to start with an audio permission error, run these"
+        warn "commands on the Proxmox host then restart the container:"
+        echo -e "    ${BF}echo 'SUBSYSTEM==\"sound\", MODE=\"0666\"' > /etc/udev/rules.d/99-lxc-audio.rules${CL}"
+        echo -e "    ${BF}udevadm control --reload-rules && udevadm trigger${CL}"
+        echo -e "    ${BF}pct restart $CTID${CL}"
+        echo
     else
         warn "/dev/snd not found on host — ALSA passthrough skipped."
         AUDIO=none
@@ -294,7 +302,7 @@ ok "qbzd-select-audio installed."
 if [[ "$AUDIO" == "alsa" ]]; then
     echo
     msg "Select the audio output device..."
-    pct exec "$CTID" -- qbzd-select-audio
+    pct exec "$CTID" -- /usr/local/sbin/qbzd-select-audio
 fi
 
 # ── Container IP ──────────────────────────────────────────────────────────────
@@ -317,7 +325,7 @@ echo    "  HTTP API:"
 echo -e "    ${BF}http://${CT_IP}:8182/api/status${CL}"
 echo
 echo    "  To change the DAC later:"
-echo -e "    ${BF}pct exec $CTID -- qbzd-select-audio${CL}"
+echo -e "    ${BF}pct exec $CTID -- /usr/local/sbin/qbzd-select-audio${CL}"
 echo
 if [[ "$AUDIO" == "none" ]]; then
     echo -e "  ${YW}⚠ No audio backend configured.${CL}"

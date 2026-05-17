@@ -453,6 +453,8 @@ fn spawn_state_reporter(app: Arc<App>, core: Arc<qbz_core::QbzCore<DaemonAdapter
             let is_playing = state.is_playing();
             let position = state.current_position();
             let duration = state.duration();
+            let sample_rate = state.get_sample_rate();
+            let bit_depth = state.get_bit_depth();
 
             let playing_state = if is_playing {
                 PLAYING_STATE_PLAYING
@@ -462,7 +464,8 @@ fn spawn_state_reporter(app: Arc<App>, core: Arc<qbz_core::QbzCore<DaemonAdapter
                 PLAYING_STATE_STOPPED
             };
 
-            let state_changed = playing_state != last_playing_state || track_id != last_track_id;
+            let track_changed = track_id != last_track_id;
+            let state_changed = playing_state != last_playing_state || track_changed;
             last_playing_state = playing_state;
             last_track_id = track_id;
 
@@ -490,6 +493,33 @@ fn spawn_state_reporter(app: Arc<App>, core: Arc<qbz_core::QbzCore<DaemonAdapter
                 log::info!(
                     "[qbzd/qconnect] State report sent: playing_state={} track={} pos={}s",
                     playing_state, track_id, position
+                );
+            }
+
+            // Notify Qobuz app of the actual file format so it displays the correct
+            // sample rate and bit depth (e.g. 192 kHz instead of the default 44.1 kHz).
+            if track_changed && track_id != 0 && sample_rate > 0 {
+                let audio_quality = match sample_rate {
+                    r if r <= 48_000 => 1,
+                    r if r <= 96_000 => 2,
+                    r if r <= 192_000 => 4,
+                    _ => 4,
+                };
+                let file_quality_report = RendererReport::new(
+                    RendererReportType::RndrSrvrFileAudioQualityChanged,
+                    Uuid::new_v4().to_string(),
+                    queue_version,
+                    serde_json::json!({
+                        "sampling_rate": sample_rate,
+                        "bit_depth": if bit_depth > 0 { bit_depth } else { 24 },
+                        "nb_channels": 2,
+                        "audio_quality": audio_quality,
+                    }),
+                );
+                let _ = app.send_renderer_report_command(file_quality_report).await;
+                log::info!(
+                    "[qbzd/qconnect] File quality report sent: {}Hz/{}bit (quality {})",
+                    sample_rate, bit_depth, audio_quality
                 );
             }
         }

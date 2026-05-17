@@ -61,7 +61,56 @@ device_name = "Living Room"   # name shown in Qobuz app
 
 A default config is baked into the image at `/etc/qbz/qbzd.toml.default`.
 
-### ProxMox / audio passthrough
+### Proxmox LXC
+
+The recommended way to run qbzd on Proxmox is as an unprivileged LXC container with ALSA passthrough. A one-liner installer handles everything:
+
+```bash
+# On the Proxmox host, as root:
+bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-lxc.sh)
+```
+
+Environment overrides (all optional):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CTID` | next available | Container ID |
+| `HOSTNAME` | `qbzd` | Container hostname |
+| `MEMORY` | `256` | RAM in MB |
+| `DISK` | `2` | Disk in GB |
+| `STORAGE` | `local-lvm` | Proxmox storage pool |
+| `AUDIO` | `alsa` | Audio backend: `alsa`, `pipewire`, `none` |
+| `CHANNEL` | `latest` | Release channel: `latest` or `nightly` |
+
+After installation:
+
+```bash
+# Authenticate with Qobuz
+pct exec <CTID> -- qbzd login
+
+# Select the audio output device (DAC)
+pct exec <CTID> -- qbzd-select-audio
+
+# Update the binary
+pct exec <CTID> -- qbzd-update            # latest release
+pct exec <CTID> -- qbzd-update nightly    # nightly build
+```
+
+**Audio device permissions** — unprivileged containers cannot access `/dev/snd` by default. If qbzd fails to start with an audio permission error, run on the host:
+
+```bash
+echo 'SUBSYSTEM=="sound", MODE="0666"' > /etc/udev/rules.d/99-lxc-audio.rules
+udevadm control --reload-rules && udevadm trigger
+pct restart <CTID>
+```
+
+**Auto start/stop with DAC** — optionally start qbzd automatically when the DAC is plugged in and stop it on unplug:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-dac-watch.sh)
+```
+
+### Docker / audio passthrough
 
 For real audio output, pass through the ALSA device or PipeWire socket from the host:
 

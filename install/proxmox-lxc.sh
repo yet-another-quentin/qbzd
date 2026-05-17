@@ -5,7 +5,7 @@
 #   bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-lxc.sh)
 #
 # Environment overrides:
-#   CTID=200 MEMORY=512 DISK=4 STORAGE=local-lvm AUDIO=alsa CHANNEL=nightly bash <(...)
+#   CTID=200 MEMORY=512 DISK=4 STORAGE=local-lvm AUDIO=alsa CHANNEL=v0.1.0 bash <(...)
 
 set -euo pipefail
 
@@ -32,7 +32,7 @@ BRIDGE="${BRIDGE:-vmbr0}"
 STORAGE="${STORAGE:-local-lvm}"
 # Audio backend: alsa | pipewire | none
 AUDIO="${AUDIO:-alsa}"
-# Release channel: latest | nightly (or any tag name)
+# Release channel: latest | any tag name (e.g. v0.1.0)
 CHANNEL="${CHANNEL:-latest}"
 # For PipeWire: UID of the host user owning the socket
 PIPEWIRE_HOST_UID="${PIPEWIRE_HOST_UID:-1000}"
@@ -307,7 +307,7 @@ msg "Installing qbzd-update..."
 pct exec "$CTID" -- tee /usr/local/sbin/qbzd-update > /dev/null << 'UPDATEEOF'
 #!/usr/bin/env bash
 # Update the qbzd binary.
-# Usage: qbzd-update [latest|nightly]  (default: latest)
+# Usage: qbzd-update [latest|<tag>]  (default: latest)
 
 set -euo pipefail
 
@@ -372,7 +372,7 @@ echo -e "    ${BF}pct exec $CTID -- qbzd-select-audio${CL}"
 echo
 echo    "  To update qbzd:"
 echo -e "    ${BF}pct exec $CTID -- qbzd-update${CL}           # latest"
-echo -e "    ${BF}pct exec $CTID -- qbzd-update nightly${CL}   # nightly"
+echo -e "    ${BF}pct exec $CTID -- qbzd-update v0.1.0${CL}    # specific tag"
 echo
 echo    "  Auto start/stop with DAC (optional):"
 echo -e "    ${BF}bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-dac-watch.sh)${CL}"

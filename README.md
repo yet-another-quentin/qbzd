@@ -80,7 +80,7 @@ Environment overrides (all optional):
 | `DISK` | `2` | Disk in GB |
 | `STORAGE` | `local-lvm` | Proxmox storage pool |
 | `AUDIO` | `alsa` | Audio backend: `alsa`, `pipewire`, `none` |
-| `CHANNEL` | `latest` | Release channel: `latest` or `nightly` |
+| `CHANNEL` | `latest` | Release channel: `latest` or any tag (e.g. `v0.1.0`) |
 
 After installation:
 
@@ -93,7 +93,7 @@ pct exec <CTID> -- qbzd-select-audio
 
 # Update the binary
 pct exec <CTID> -- qbzd-update            # latest release
-pct exec <CTID> -- qbzd-update nightly    # nightly build
+pct exec <CTID> -- qbzd-update v0.1.0     # specific tag
 ```
 
 **Audio device permissions** — unprivileged containers cannot access `/dev/snd` by default. If qbzd fails to start with an audio permission error, run on the host:

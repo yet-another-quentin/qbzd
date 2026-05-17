@@ -205,6 +205,7 @@ device_name = ""
 
 [mdns]
 enabled = true
+name = ""
 
 [logging]
 level = "info"

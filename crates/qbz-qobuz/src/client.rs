@@ -1291,6 +1291,14 @@ impl QobuzClient {
     /// POST to track/getList with JSON body {"tracks_id": [...]}
     /// Returns full Track objects for the given IDs (max 50 per call).
     pub async fn get_tracks_batch(&self, track_ids: &[u64]) -> Result<Vec<Track>> {
+        let mut all_tracks = Vec::with_capacity(track_ids.len());
+        for chunk in track_ids.chunks(50) {
+            all_tracks.extend(self.get_tracks_chunk(chunk).await?);
+        }
+        Ok(all_tracks)
+    }
+
+    async fn get_tracks_chunk(&self, track_ids: &[u64]) -> Result<Vec<Track>> {
         let url = endpoints::build_url(paths::TRACK_GET_LIST);
         let headers = self.api_headers().await?;
         let timestamp = get_timestamp();
@@ -1299,7 +1307,7 @@ impl QobuzClient {
         let sig = sign_request("trackgetList", &[("tracks_id", &ids_str)], timestamp, &secret);
 
         let body = serde_json::json!({ "tracks_id": track_ids });
-        log::debug!("[API] get_tracks_batch POST ({} IDs)", track_ids.len());
+        log::debug!("[API] get_tracks_chunk POST ({} IDs)", track_ids.len());
 
         let http_response = self
             .http
@@ -1311,7 +1319,7 @@ impl QobuzClient {
             .await?;
 
         let status = http_response.status();
-        log::debug!("[API] get_tracks_batch POST status={}", status);
+        log::debug!("[API] get_tracks_chunk POST status={}", status);
 
         let value: Value = http_response.json().await?;
 
@@ -1332,7 +1340,7 @@ impl QobuzClient {
             })?;
 
         let tracks: Vec<Track> = serde_json::from_value(items.clone())?;
-        log::debug!("[API] get_tracks_batch returned {} tracks", tracks.len());
+        log::debug!("[API] get_tracks_chunk returned {} tracks", tracks.len());
         Ok(tracks)
     }
 

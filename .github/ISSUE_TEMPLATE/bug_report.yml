@@ -1,8 +1,20 @@
 name: Bug report
-description: Report something that is not working as expected
+description: Something in the Proxmox installation tooling is not working
 title: "[Bug] "
 labels: ["bug"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository only contains the Proxmox/LXC deployment scripts.
+
+        **Playback problems, audio quality, Qobuz Connect behaviour, the HTTP
+        API or the `qbzd setup` TUI belong upstream:**
+        https://github.com/vicrodh/qbz/issues
+
+        Report here only what concerns container creation, ALSA passthrough,
+        the systemd unit, `qbzd-update`, or the DAC hotplug rule.
+
   - type: textarea
     id: description
     attributes:
@@ -11,10 +23,23 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: script
+    attributes:
+      label: Which script
+      options:
+        - install/proxmox-lxc.sh
+        - install/proxmox-dac-watch.sh
+        - qbzd-update (inside the container)
+        - Not sure
+    validations:
+      required: true
+
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
+      description: Include the exact command line, with any environment overrides.
       value: |
         1.
         2.
@@ -23,63 +48,46 @@ body:
       required: true
 
   - type: textarea
-    id: expected
+    id: output
     attributes:
-      label: Expected behavior
-    validations:
-      required: true
+      label: Script output
+      description: Paste the relevant output. Redact your Qobuz credentials.
+      render: shell
 
-  - type: textarea
-    id: actual
+  - type: input
+    id: pve_version
     attributes:
-      label: Actual behavior
+      label: Proxmox version
+      placeholder: "e.g. PVE 8.2 — output of: pveversion"
     validations:
       required: true
 
   - type: input
-    id: version
+    id: qbzd_version
     attributes:
       label: qbzd version
-      placeholder: e.g. v0.2.0 or git SHA
-    validations:
-      required: true
+      placeholder: "e.g. v2.0.2 — output of: pct exec <CTID> -- qbzd --version"
 
   - type: dropdown
-    id: install
+    id: audio
     attributes:
-      label: Installation method
+      label: AUDIO mode used
       options:
-        - Docker
-        - Binary (built from source)
-        - Binary (GitHub release)
+        - alsa
+        - pipewire
+        - none
     validations:
       required: true
 
   - type: input
-    id: host
+    id: dac
     attributes:
-      label: Host OS / distribution
-      placeholder: e.g. Debian 12, Ubuntu 24.04, ProxMox 8
-
-  - type: dropdown
-    id: audio_backend
-    attributes:
-      label: Audio backend
-      options:
-        - PipeWire
-        - ALSA
-        - PulseAudio
-
-  - type: input
-    id: audio_device
-    attributes:
-      label: Audio device / DAC
-      placeholder: e.g. Schiit Modi 3, onboard HDA
+      label: DAC
+      placeholder: "e.g. Topping E30, connected over USB"
 
   - type: textarea
-    id: logs
+    id: journal
     attributes:
-      label: Logs
-      description: |
-        Run with `--log-level debug` and paste the relevant output.
-        In Docker: `docker logs qbzd`
+      label: Service log
+      description: "Output of: pct exec <CTID> -- journalctl -u qbzd -n 50"
+      render: shell

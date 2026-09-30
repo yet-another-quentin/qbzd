@@ -5,7 +5,7 @@
 # the DAC is plugged in and stop it when unplugged.
 #
 # Usage (on the Proxmox host, as root):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-dac-watch.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/yet-another-quentin/qbzd/main/install/proxmox-dac-watch.sh)
 #
 # Environment overrides:
 #   CTID=104 bash <(...)

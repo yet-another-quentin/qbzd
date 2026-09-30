@@ -1,5 +1,6 @@
-# Rust build artifacts
-crates/target/
+# Leftover Rust build cache from before the deployment-tooling rewrite.
+# Nothing here builds anymore; the directory can be deleted.
+crates/
 
 # IDE
 .idea/
@@ -14,9 +15,7 @@ Thumbs.db
 # Logs
 *.log
 
-# Release artifacts
-*.deb
-*.rpm
+# Downloaded release artifacts
 *.tar.gz
 
 # Local temp

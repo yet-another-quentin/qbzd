@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: qbzd itself (playback, audio, Qobuz Connect, HTTP API, setup TUI)
+    url: https://github.com/vicrodh/qbz/issues
+    about: This repository only ships the Proxmox/LXC deployment scripts. Anything the daemon does belongs upstream.
+  - name: qbzd documentation
+    url: https://github.com/vicrodh/qbz/wiki/Headless-Daemon
+    about: Upstream wiki — CLI reference, configuration, service management.

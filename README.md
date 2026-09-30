@@ -1,102 +1,92 @@
-# qbzd
+# qbzd on Proxmox
 
-**Qobuz Connect receiver for Linux — headless, containerized.**
+**Deployment tooling to run [qbzd](https://github.com/vicrodh/qbz) — the headless Qobuz Connect daemon — in an unprivileged Proxmox LXC, feeding a USB DAC.**
 
-qbzd is a lightweight daemon that makes any Linux machine (or container) appear as a Qobuz Connect device. Once running, it shows up in the Qobuz app (Android, iOS, macOS, web) and accepts playback commands from there.
+This repository contains **no application code**. It installs the official `qbzd`
+binary published by the upstream project and wires it into a container: ALSA
+passthrough from the host, a systemd unit, an update helper, and optional
+automatic start/stop when the DAC is plugged in.
 
-Fork of [vicrodh/qbz](https://github.com/vicrodh/qbz) (MIT), stripped down to the headless daemon and its dependencies.
+Once running, the container appears in the official Qobuz app (Android, iOS,
+macOS, web) as a castable device.
 
 > **Legal:** This project uses the Qobuz API but is not affiliated with, endorsed by, or certified by Qobuz. Qobuz is a registered trademark of Qobuz SAS.
 
 ---
 
-## Quick start (Docker)
+## Install
+
+On the Proxmox host, as root:
 
 ```bash
-docker run -d \
-  --name qbzd \
-  -p 8182:8182 \
-  -v qbzd-data:/var/lib/qbzd \
-  ghcr.io/qbarlas/qbzd:latest
+bash <(curl -fsSL https://raw.githubusercontent.com/yet-another-quentin/qbzd/main/install/proxmox-lxc.sh)
 ```
 
-Then authenticate:
+The installer creates an unprivileged Debian 12 container, passes `/dev/snd`
+through, downloads the latest upstream `qbzd` release and registers a systemd
+unit.
+
+Then configure it — this step is interactive, so it needs a real terminal:
 
 ```bash
-docker exec -it qbzd qbzd login
+pct enter <CTID>
+su - qbzd -c 'qbzd setup'      # Qobuz login, audio device, Connect device name
+systemctl enable --now qbzd
 ```
 
-This opens the Qobuz OAuth URL. Open it in any browser on the same network. After login the device appears in the Qobuz app within a few seconds.
+`qbzd setup` is upstream's six-screen configurator. It must run as the `qbzd`
+user, because it writes the same stores the service reads.
 
-If the browser redirect cannot reach the container (e.g. Docker Desktop on macOS), pass the public address explicitly:
-
-```bash
-docker exec -it qbzd qbzd login --callback-host http://<your-host-ip>:8182
-```
-
-Alternatively, authenticate with a direct token (obtained from a Qobuz session cookie or a trusted tool):
-
-```bash
-docker exec -it qbzd qbzd login --token <user_auth_token>
-```
-
----
-
-## Configuration
-
-Mount a `qbzd.toml` into `/etc/qbz/qbzd.toml` to override defaults:
-
-```toml
-[server]
-port = 8182
-
-[audio]
-backend = "pipewire"   # pipewire | alsa | pulse
-
-[qconnect]
-enabled     = true
-device_name = "Living Room"   # name shown in Qobuz app
-
-```
-
-A default config is baked into the image at `/etc/qbz/qbzd.toml.default`.
-
-### Proxmox LXC
-
-The recommended way to run qbzd on Proxmox is as an unprivileged LXC container with ALSA passthrough. A one-liner installer handles everything:
-
-```bash
-# On the Proxmox host, as root:
-bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-lxc.sh)
-```
-
-Environment overrides (all optional):
+### Options
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CTID` | next available | Container ID |
-| `HOSTNAME` | `qbzd` | Container hostname |
-| `MEMORY` | `256` | RAM in MB |
+| `CT_HOSTNAME` | `qbzd` | Container hostname (not `HOSTNAME` — bash already owns that name) |
+| `MEMORY` | `512` | RAM in MB |
 | `DISK` | `2` | Disk in GB |
+| `CORES` | `1` | CPU cores |
 | `STORAGE` | `local-lvm` | Proxmox storage pool |
-| `AUDIO` | `alsa` | Audio backend: `alsa`, `pipewire`, `none` |
-| `CHANNEL` | `latest` | Release channel: `latest` or any tag (e.g. `v0.1.0`) |
-
-After installation:
+| `BRIDGE` | `vmbr0` | Network bridge |
+| `AUDIO` | `alsa` | `alsa`, `pipewire` or `none` |
+| `CHANNEL` | `latest` | Upstream release: `latest` or a tag (e.g. `v2.0.2`) |
 
 ```bash
-# Authenticate with Qobuz
-pct exec <CTID> -- qbzd login
-
-# Select the audio output device (DAC)
-pct exec <CTID> -- qbzd-select-audio
-
-# Update the binary
-pct exec <CTID> -- qbzd-update            # latest release
-pct exec <CTID> -- qbzd-update v0.1.0     # specific tag
+CTID=200 MEMORY=1024 AUDIO=alsa bash <(curl -fsSL .../proxmox-lxc.sh)
 ```
 
-**Audio device permissions** — unprivileged containers cannot access `/dev/snd` by default. If qbzd fails to start with an audio permission error, run on the host:
+**Use ALSA.** On a USB DAC it is bit-perfect and runs no sound server inside the
+container. PipeWire adds three daemons (~60–90 MB) for no benefit here.
+
+---
+
+## Day-to-day
+
+```bash
+# Change the DAC, the device name, or any other setting
+pct enter <CTID>
+su - qbzd -c 'qbzd setup'
+
+# Update to the latest upstream release
+pct exec <CTID> -- qbzd-update
+pct exec <CTID> -- qbzd-update v2.0.2   # or a specific tag
+
+# Service
+pct exec <CTID> -- systemctl status qbzd
+pct exec <CTID> -- journalctl -u qbzd -f
+```
+
+The HTTP API is on port 8182: `http://<container-ip>:8182/api/status`.
+
+Upstream ships a full CLI inside the same binary (`qbzd play`, `qbzd queue`,
+`qbzd search`, …) — see the [upstream wiki](https://github.com/vicrodh/qbz/wiki/Headless-Daemon).
+
+---
+
+## Audio device permissions
+
+Unprivileged containers cannot access `/dev/snd` by default. If qbzd fails to
+start with an audio permission error, run on the **host**:
 
 ```bash
 echo 'SUBSYSTEM=="sound", MODE="0666"' > /etc/udev/rules.d/99-lxc-audio.rules
@@ -104,97 +94,44 @@ udevadm control --reload-rules && udevadm trigger
 pct restart <CTID>
 ```
 
-**Auto start/stop with DAC** — optionally start qbzd automatically when the DAC is plugged in and stop it on unplug:
+---
+
+## Auto start/stop with the DAC
+
+Optional: start qbzd when the DAC is plugged in, stop it when unplugged.
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-dac-watch.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/yet-another-quentin/qbzd/main/install/proxmox-dac-watch.sh)
 ```
 
-### Docker / audio passthrough
-
-For real audio output, pass through the ALSA device or PipeWire socket from the host:
-
-```yaml
-# docker-compose.yml
-devices:
-  - /dev/snd:/dev/snd
-environment:
-  - ALSA_CARD=0
-```
-
-Or for PipeWire:
-
-```yaml
-volumes:
-  - /run/user/1000/pipewire-0:/run/user/1000/pipewire-0
-```
+This writes a udev rule on the host that drives
+`pct exec <CTID> -- systemctl start|stop qbzd`. Only physical USB disconnect is
+detected — a DAC that stays enumerated when powered off will not trigger it.
 
 ---
 
-## HTTP API
+## Why a system unit
 
-The daemon exposes a local REST API on port 8182.
+Upstream ships a **user** unit that requires `loginctl enable-linger`. This
+installer registers a **system** unit instead:
 
-| Group | Endpoints |
-|-------|-----------|
-| Auth | `POST /api/auth/oauth/start` · `GET /api/auth/oauth/callback` · `GET /api/auth/oauth/status` · `POST /api/auth/token` |
-| System | `GET /api/ping` · `GET /api/status` · `GET /api/info` · `GET /api/events` (SSE) · `GET /api/system/resources` · `DELETE /api/cache` |
-| Playback | `GET /api/playback` · play · pause · stop · next · previous · seek · volume |
-| Queue | `GET /api/queue` · set · add · add-next · play-index · remove · move · clear · shuffle · repeat |
-| Audio | `GET/PATCH /api/audio/settings` · backends · devices · hardware-status |
+- no linger to enable, and no session to keep alive;
+- `pct exec <CTID> -- systemctl start qbzd` works from the host, which is what
+  the DAC watch rule needs — driving a user unit from outside the container is
+  considerably more fragile.
 
-Full spec: `docs/openapi.yaml`
-
----
-
-## Building from source
-
-**Prerequisites:** Rust stable, `pkg-config`, `libasound2-dev`, `libdbus-1-dev`
-
-```bash
-git clone https://github.com/qbarlas/qbzd.git
-cd qbzd/crates
-cargo build --release -p qbzd
-```
-
-**Docker:**
-
-```bash
-docker build -t qbzd:latest .
-```
+The binary is the same, and boot-order resilience lives inside it (missing
+network or DAC at start means retry with backoff, never a crash-exit).
 
 ---
 
-## Architecture
+## History
 
-```
-crates/
-  qbzd/                   Headless daemon — HTTP API, auth, QConnect bridge
-  qbz-core/               Orchestrator (player + audio + API client)
-  qbz-player/             Playback engine, queue, streaming
-  qbz-audio/              Audio backends (PipeWire, ALSA, PulseAudio)
-  qbz-qobuz/              Qobuz API client and OAuth
-  qbz-models/             Shared domain types
-  qbz-cache/              Audio cache (memory + disk)
-  qbz-cmaf/               CMAF/MP4 fragment parser (used by qbz-qobuz)
-  qconnect-protocol/      Qobuz Connect protobuf wire format
-  qconnect-core/          Queue and renderer state machines
-  qconnect-app/           QConnect application logic
-  qconnect-transport-ws/  WebSocket transport with qcloud framing
-```
-
----
-
-## Credits
-
-qbzd is a fork of [vicrodh/qbz](https://github.com/vicrodh/qbz) by
-[blitzkriegfc](https://github.com/vicrodh), the original author of the Qobuz
-Connect receiver. The core architecture, audio backends, Qobuz API client, and
-QConnect protocol implementation all originate from that project.
-
-This fork strips the desktop UI and refocuses the project as a headless daemon.
-The upstream project is MIT-licensed and its copyright is preserved in full in
-[LICENSE](LICENSE).
+This repository used to carry a fork of [vicrodh/qbz](https://github.com/vicrodh/qbz)
+stripped down to a headless daemon. Upstream now ships its own `qbzd` — more
+complete (MPRIS, scrobbling, a CLI and a setup TUI) and actively maintained —
+so the fork was retired in favour of these deployment scripts. The Git history
+still holds it if you need to look back.
 
 ## License
 

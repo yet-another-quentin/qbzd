@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # qbzd — Proxmox LXC installer
 #
+# Creates an unprivileged Debian 12 container running qbzd, the headless
+# Qobuz Connect daemon from https://github.com/vicrodh/qbz, with the host's
+# USB DAC passed through via ALSA.
+#
+# This installer does not build anything: it downloads the official qbzd
+# release tarball published by the upstream project.
+#
 # Usage (on the Proxmox host, as root):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-lxc.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/yet-another-quentin/qbzd/main/install/proxmox-lxc.sh)
 #
 # Environment overrides:
-#   CTID=200 MEMORY=512 DISK=4 STORAGE=local-lvm AUDIO=alsa CHANNEL=v0.1.0 bash <(...)
+#   CTID=200 MEMORY=1024 DISK=4 STORAGE=local-lvm AUDIO=alsa CHANNEL=v2.0.2 bash <(...)
 
 set -euo pipefail
 
@@ -17,42 +24,76 @@ warn() { echo -e "${YW}⚠${CL} $*"; }
 die()  { echo -e "${RD}✘${CL} $*" >&2; exit 1; }
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
-[[ $EUID -eq 0 ]]         || die "This script must be run as root on the Proxmox host."
-command -v pct >/dev/null || die "pct not found — this script must run on a Proxmox host."
+[[ $EUID -eq 0 ]]           || die "This script must be run as root on the Proxmox host."
+command -v pct >/dev/null   || die "pct not found — this script must run on a Proxmox host."
 command -v pvesh >/dev/null || die "pvesh not found."
 
 # ── Parameters ────────────────────────────────────────────────────────────────
 ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+# Upstream names its tarballs amd64 / aarch64, Debian calls the latter arm64.
+case "$ARCH" in
+  amd64) ASSET_ARCH="amd64"   ;;
+  arm64) ASSET_ARCH="aarch64" ;;
+  *)     die "Unsupported architecture: $ARCH (upstream ships amd64 and aarch64 only)." ;;
+esac
+
 CTID="${CTID:-$(pvesh get /cluster/nextid 2>/dev/null || echo 200)}"
-HOSTNAME="${HOSTNAME:-qbzd}"
-MEMORY="${MEMORY:-256}"
+# CT_HOSTNAME, not HOSTNAME: bash sets HOSTNAME itself, to the name of the
+# machine running the script. `${HOSTNAME:-qbzd}` therefore never falls back to
+# qbzd — it silently names the container after the Proxmox host.
+CT_HOSTNAME="${CT_HOSTNAME:-qbzd}"
+MEMORY="${MEMORY:-512}"
 DISK="${DISK:-2}"
 CORES="${CORES:-1}"
 BRIDGE="${BRIDGE:-vmbr0}"
 STORAGE="${STORAGE:-local-lvm}"
 # Audio backend: alsa | pipewire | none
+# alsa is the recommended path for a USB DAC: bit-perfect, and no sound
+# server daemons running inside the container.
 AUDIO="${AUDIO:-alsa}"
-# Release channel: latest | any tag name (e.g. v0.1.0)
+# Release channel: latest | any upstream tag (e.g. v2.0.2)
 CHANNEL="${CHANNEL:-latest}"
 # For PipeWire: UID of the host user owning the socket
 PIPEWIRE_HOST_UID="${PIPEWIRE_HOST_UID:-1000}"
+
+UPSTREAM_REPO="vicrodh/qbz"
+
+# ── Resolve the release to install ────────────────────────────────────────────
+# The tarball name embeds the version (qbzd-2.0.2-linux-amd64.tar.gz), so even
+# "latest" has to be resolved to a concrete tag before building the URL.
+msg "Resolving the qbzd release to install..."
+if [[ "$CHANNEL" == "latest" ]]; then
+    TAG=$(curl -fsSL "https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest" \
+        | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -1)
+    [[ -n "$TAG" ]] || die "Could not resolve the latest release of ${UPSTREAM_REPO}."
+else
+    TAG="$CHANNEL"
+fi
+VERSION="${TAG#v}"
+TARBALL="qbzd-${VERSION}-linux-${ASSET_ARCH}.tar.gz"
+TARBALL_URL="https://github.com/${UPSTREAM_REPO}/releases/download/${TAG}/${TARBALL}"
+
+curl -fsIL -o /dev/null "$TARBALL_URL" \
+    || die "Release asset not found:\n    ${TARBALL_URL}\n  Check the tag with: gh release list --repo ${UPSTREAM_REPO}"
+ok "Release ${TAG} (${ASSET_ARCH})."
 
 echo
 echo -e "${BF}  qbzd — Proxmox LXC installer${CL}"
 echo    "  ─────────────────────────────"
 echo    "  Container ID  : $CTID"
-echo    "  Hostname      : $HOSTNAME"
+echo    "  Hostname      : $CT_HOSTNAME"
 echo    "  RAM / Disk    : ${MEMORY} MB / ${DISK} GB"
 echo    "  Storage       : $STORAGE"
 echo    "  Arch          : $ARCH"
 echo    "  Audio         : $AUDIO"
-echo    "  Channel       : $CHANNEL"
+echo    "  qbzd version  : $TAG (from ${UPSTREAM_REPO})"
 echo
 read -r -p "  Continue? [Y/n] " _confirm
 [[ "${_confirm:-Y}" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 echo
 
 # ── Debian 12 template ────────────────────────────────────────────────────────
+# Upstream builds qbzd against glibc 2.35, so bookworm (2.36) runs it as-is.
 msg "Looking for a Debian 12 template..."
 pveam update --section system >/dev/null 2>&1 || true
 
@@ -70,7 +111,7 @@ ok "Template ready: $TEMPLATE_NAME"
 # ── Create container ──────────────────────────────────────────────────────────
 msg "Creating LXC container $CTID..."
 pct create "$CTID" "$TEMPLATE_STORAGE:vztmpl/$TEMPLATE_NAME" \
-    --hostname    "$HOSTNAME" \
+    --hostname    "$CT_HOSTNAME" \
     --memory      "$MEMORY" \
     --cores       "$CORES" \
     --rootfs      "$STORAGE:$DISK" \
@@ -87,8 +128,12 @@ LXC_CONF="/etc/pve/lxc/${CTID}.conf"
 case "$AUDIO" in
   alsa)
     if [[ -d /dev/snd ]]; then
-        ALSA_MAJOR=$(stat -c '%t' /dev/snd/controlC0 2>/dev/null \
-            | xargs printf '%d\n' || echo 116)
+        # /proc/devices lists the major in decimal ("116 alsa"). Do not read it
+        # from `stat -c '%t'`: that prints hex (74), which then has to be
+        # converted — getting it wrong writes a cgroup rule for major 74 and
+        # every open of /dev/snd/* inside the container fails with EPERM.
+        ALSA_MAJOR=$(awk '$2 == "alsa" { print $1 }' /proc/devices | head -1)
+        [[ -n "$ALSA_MAJOR" ]] || ALSA_MAJOR=116
         msg "Adding ALSA passthrough (major $ALSA_MAJOR)..."
         cat >> "$LXC_CONF" <<EOF
 
@@ -111,6 +156,8 @@ EOF
     fi
     ;;
   pipewire)
+    warn "PipeWire runs three extra daemons inside the container for no benefit"
+    warn "on a USB DAC. ALSA (AUDIO=alsa) is lighter and bit-perfect."
     PIPEWIRE_SOCK="/run/user/${PIPEWIRE_HOST_UID}/pipewire-0"
     if [[ -S "$PIPEWIRE_SOCK" ]]; then
         msg "Adding PipeWire passthrough ($PIPEWIRE_SOCK)..."
@@ -144,9 +191,11 @@ msg "Installing qbzd inside the container..."
 
 pct exec "$CTID" -- bash -euo pipefail <<INNEREOF
 export DEBIAN_FRONTEND=noninteractive
-ARCH="${ARCH}"
 AUDIO="${AUDIO}"
-CHANNEL="${CHANNEL}"
+TARBALL_URL="${TARBALL_URL}"
+TARBALL="${TARBALL}"
+VERSION="${VERSION}"
+ASSET_ARCH="${ASSET_ARCH}"
 
 apt-get update -qq
 apt-get install -y --no-install-recommends \
@@ -157,182 +206,122 @@ if [[ "\$AUDIO" == "pipewire" ]]; then
         pipewire pipewire-pulse wireplumber pipewire-bin pulseaudio-utils
 fi
 
+# Dedicated service account. It needs a real shell because \`qbzd setup\` is an
+# interactive TUI that must run as this user — it writes the very stores the
+# service reads, so running it as root would configure the wrong account.
 if ! id qbzd &>/dev/null; then
     groupadd -r qbzd
-    useradd -r -g qbzd -G audio -m -d /var/lib/qbzd -s /sbin/nologin qbzd
+    useradd -r -g qbzd -G audio -m -d /var/lib/qbzd -s /bin/bash qbzd
 fi
-
-mkdir -p /var/lib/qbzd/config /etc/qbz
+mkdir -p /var/lib/qbzd
 chown -R qbzd:qbzd /var/lib/qbzd
 
+echo "Downloading \$TARBALL_URL..."
+TMP=\$(mktemp -d)
+curl -fsSL "\$TARBALL_URL" -o "\$TMP/\$TARBALL"
+tar xzf "\$TMP/\$TARBALL" -C "\$TMP"
+SRC="\$TMP/qbzd-\${VERSION}-linux-\${ASSET_ARCH}"
 
-if [[ "\$CHANNEL" == "latest" ]]; then
-    BINARY_URL="https://github.com/qbarlas/qbzd/releases/latest/download/qbzd-linux-\${ARCH}"
-else
-    BINARY_URL="https://github.com/qbarlas/qbzd/releases/download/\${CHANNEL}/qbzd-linux-\${ARCH}"
+install -Dm755 "\$SRC/qbzd" /usr/bin/qbzd
+if [[ -f "\$SRC/completions/qbzd.bash" ]]; then
+    install -Dm644 "\$SRC/completions/qbzd.bash" \
+        /usr/share/bash-completion/completions/qbzd
 fi
-echo "Downloading from \$BINARY_URL..."
-curl -fsSL "\$BINARY_URL" -o /usr/local/bin/qbzd
-chmod +x /usr/local/bin/qbzd
-ln -sf /usr/local/bin/qbzd /usr/bin/qbzd
+rm -rf "\$TMP"
 
-cat > /etc/qbz/qbzd.toml <<TOML
-[server]
-bind = "0.0.0.0"
-port = 8182
-token = "auto"
-
-[audio]
-backend = "\${AUDIO:-alsa}"
-device = ""
-gapless = true
-normalization = false
-
-[cache]
-memory_mb = 0
-disk_mb = 400
-prefetch_count = 2
-prefetch_concurrent = 1
-cmaf_concurrent_segments = 2
-
-[cache.auto]
-enabled = true
-
-[data]
-dir = "/var/lib/qbzd"
-
-[qconnect]
-enabled = true
-device_name = ""
-
-[mdns]
-enabled = true
-name = ""
-
-[logging]
-level = "info"
-journal = true
-TOML
-
+# System unit rather than the user unit upstream ships: no linger needed, it
+# survives logout by construction, and \`pct exec <CTID> -- systemctl start qbzd\`
+# works from the Proxmox host — which is what proxmox-dac-watch.sh drives.
 cat > /etc/systemd/system/qbzd.service <<UNIT
 [Unit]
 Description=qbzd — Qobuz Connect receiver
+Documentation=https://github.com/vicrodh/qbz/wiki/Headless-Daemon
 After=network-online.target
 Wants=network-online.target
 
 [Service]
+Type=simple
 User=qbzd
 Group=qbzd
-ExecStart=/usr/local/bin/qbzd --config /etc/qbz/qbzd.toml --data-dir /var/lib/qbzd
+ExecStart=/usr/bin/qbzd run
 Restart=on-failure
-RestartSec=5s
-Environment=RUST_LOG=info
+RestartSec=10
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
 UNIT
 
 systemctl daemon-reload
-systemctl enable --now qbzd
+
+# Deliberately not enabled or started yet: qbzd has no credentials and no
+# audio device until \`qbzd setup\` has run, and an unconfigured unit would
+# just restart-loop.
 INNEREOF
 
-ok "qbzd installed and started."
-
-# ── Install the audio selection helper ────────────────────────────────────────
-# Written via stdin (tee into the container) — no variable expansion.
-msg "Installing qbzd-select-audio..."
-pct exec "$CTID" -- tee /usr/local/sbin/qbzd-select-audio > /dev/null << 'SELECTEOF'
-#!/usr/bin/env bash
-# Select or change the ALSA audio device used by qbzd.
-# Usage: qbzd-select-audio
-# Can be re-run at any time after a DAC change.
-
-set -euo pipefail
-
-CONFIG="/etc/qbz/qbzd.toml"
-GN="\033[32m" RD="\033[31m" BL="\033[36m" CL="\033[0m" BF="\033[1m"
-ok()  { echo -e "${GN}✔${CL} $*"; }
-die() { echo -e "${RD}✘${CL} $*" >&2; exit 1; }
-
-[[ -f "$CONFIG" ]] || die "Config not found: $CONFIG"
-
-CARDS_RAW=$(aplay -l 2>/dev/null | grep '^card' || true)
-[[ -n "$CARDS_RAW" ]] \
-    || die "No audio device detected.\nCheck /dev/snd passthrough from the Proxmox host."
-
-echo
-echo -e "${BF}  Available audio devices:${CL}"
-echo    "  ─────────────────────────"
-
-declare -a HW_IDS
-declare -a HW_LABELS
-i=0
-while IFS= read -r line; do
-    CARD_NUM=$(echo "$line" | sed 's/card \([0-9]*\):.*/\1/')
-    SHORT=$(echo "$line"    | sed 's/card [0-9]*: \([^ ]*\) .*/\1/')
-    DEV_NUM=$(echo "$line"  | sed 's/.*, device \([0-9]*\):.*/\1/')
-    LONG=$(echo "$line"     | sed 's/.*\[\(.*\)\], device.*/\1/')
-    DEV_LONG=$(echo "$line" | sed 's/.*device [0-9]*: [^ ]* \[\(.*\)\]/\1/')
-    HW_IDS[$i]="hw:${SHORT},${DEV_NUM}"
-    HW_LABELS[$i]="${LONG} — ${DEV_LONG}  (hw:${CARD_NUM},${DEV_NUM})"
-    echo "  [$i] ${HW_LABELS[$i]}"
-    i=$((i + 1))
-done <<< "$CARDS_RAW"
-echo
-
-CURRENT=$(grep '^device' "$CONFIG" | sed 's/device *= *"\?\([^"]*\)"\?/\1/' | xargs)
-[[ -n "$CURRENT" ]] && echo -e "  Current: ${BF}${CURRENT:-<default>}${CL}\n"
-
-read -r -p "  Device number [0]: " CHOICE
-CHOICE="${CHOICE:-0}"
-[[ "$CHOICE" =~ ^[0-9]+$ ]] && [[ "$CHOICE" -lt "$i" ]] \
-    || die "Invalid choice: $CHOICE"
-
-SELECTED="${HW_IDS[$CHOICE]}"
-sed -i "s|^device = .*|device = \"${SELECTED}\"|" "$CONFIG"
-ok "Device updated: $SELECTED"
-
-if systemctl is-active --quiet qbzd 2>/dev/null; then
-    systemctl restart qbzd
-    ok "qbzd restarted."
-fi
-SELECTEOF
-
-pct exec "$CTID" -- chmod +x /usr/local/sbin/qbzd-select-audio
-pct exec "$CTID" -- ln -sf /usr/local/sbin/qbzd-select-audio /usr/bin/qbzd-select-audio
-ok "qbzd-select-audio installed."
+ok "qbzd ${TAG} installed (service registered, not started yet)."
 
 # ── Install the update helper ─────────────────────────────────────────────────
 msg "Installing qbzd-update..."
 pct exec "$CTID" -- tee /usr/local/sbin/qbzd-update > /dev/null << 'UPDATEEOF'
 #!/usr/bin/env bash
-# Update the qbzd binary.
-# Usage: qbzd-update [latest|<tag>]  (default: latest)
+# Update the qbzd binary from the upstream release tarballs.
+# Usage: qbzd-update [latest|<tag>]   (default: latest)
 
 set -euo pipefail
 
 CHANNEL="${1:-latest}"
-ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-GN="\033[32m" RD="\033[31m" BL="\033[36m" CL="\033[0m" BF="\033[1m"
+UPSTREAM_REPO="vicrodh/qbz"
+
+GN="\033[32m" RD="\033[31m" BL="\033[36m" CL="\033[0m"
 msg() { echo -e "${BL}▶${CL} $*"; }
 ok()  { echo -e "${GN}✔${CL} $*"; }
 die() { echo -e "${RD}✘${CL} $*" >&2; exit 1; }
 
+ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+case "$ARCH" in
+  amd64) ASSET_ARCH="amd64"   ;;
+  arm64) ASSET_ARCH="aarch64" ;;
+  *)     die "Unsupported architecture: $ARCH" ;;
+esac
+
 if [[ "$CHANNEL" == "latest" ]]; then
-    URL="https://github.com/qbarlas/qbzd/releases/latest/download/qbzd-linux-${ARCH}"
+    TAG=$(curl -fsSL "https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest" \
+        | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -1)
+    [[ -n "$TAG" ]] || die "Could not resolve the latest release."
 else
-    URL="https://github.com/qbarlas/qbzd/releases/download/${CHANNEL}/qbzd-linux-${ARCH}"
+    TAG="$CHANNEL"
+fi
+VERSION="${TAG#v}"
+TARBALL="qbzd-${VERSION}-linux-${ASSET_ARCH}.tar.gz"
+URL="https://github.com/${UPSTREAM_REPO}/releases/download/${TAG}/${TARBALL}"
+
+CURRENT=$(qbzd --version 2>/dev/null || echo "unknown")
+msg "Installed: ${CURRENT}"
+msg "Downloading ${TAG} (${ASSET_ARCH})..."
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+curl -fsSL "$URL" -o "$TMP/$TARBALL" || die "Download failed: $URL"
+tar xzf "$TMP/$TARBALL" -C "$TMP"
+SRC="$TMP/qbzd-${VERSION}-linux-${ASSET_ARCH}"
+[[ -x "$SRC/qbzd" ]] || die "No qbzd binary inside $TARBALL"
+
+WAS_ACTIVE=no
+if systemctl is-active --quiet qbzd 2>/dev/null; then
+    WAS_ACTIVE=yes
+    systemctl stop qbzd
 fi
 
-msg "Downloading qbzd (${CHANNEL}, ${ARCH})..."
-curl -fsSL "$URL" -o /usr/local/bin/qbzd.new \
-    || die "Download failed: $URL"
-chmod +x /usr/local/bin/qbzd.new
-mv /usr/local/bin/qbzd.new /usr/local/bin/qbzd
-ok "Binary updated."
+install -Dm755 "$SRC/qbzd" /usr/bin/qbzd
+if [[ -f "$SRC/completions/qbzd.bash" ]]; then
+    install -Dm644 "$SRC/completions/qbzd.bash" \
+        /usr/share/bash-completion/completions/qbzd
+fi
+ok "Updated to $(qbzd --version 2>/dev/null || echo "$TAG")."
 
-if systemctl is-active --quiet qbzd 2>/dev/null; then
-    systemctl restart qbzd
+if [[ "$WAS_ACTIVE" == "yes" ]]; then
+    systemctl start qbzd
     ok "qbzd restarted."
 fi
 UPDATEEOF
@@ -341,13 +330,6 @@ pct exec "$CTID" -- chmod +x /usr/local/sbin/qbzd-update
 pct exec "$CTID" -- ln -sf /usr/local/sbin/qbzd-update /usr/bin/qbzd-update
 ok "qbzd-update installed."
 
-# ── Audio device selection ────────────────────────────────────────────────────
-if [[ "$AUDIO" == "alsa" ]]; then
-    echo
-    msg "Select the audio output device..."
-    pct exec "$CTID" -- /usr/local/sbin/qbzd-select-audio
-fi
-
 # ── Container IP ──────────────────────────────────────────────────────────────
 sleep 2
 CT_IP=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}') \
@@ -355,30 +337,35 @@ CT_IP=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}') \
 
 # ── Final instructions ────────────────────────────────────────────────────────
 echo
-echo -e "${GN}${BF}  Setup complete!${CL}"
+echo -e "${GN}${BF}  Container ready — one manual step left.${CL}"
 echo    "  ─────────────────────────────────────────────────"
-echo    "  Container: $CTID ($HOSTNAME)  —  IP: $CT_IP"
+echo    "  Container: $CTID ($CT_HOSTNAME)  —  IP: $CT_IP"
 echo
-echo    "  Authenticate with Qobuz:"
-echo -e "    ${BF}pct exec $CTID -- qbzd login${CL}"
-echo    "    (if the OAuth callback is unreachable from the browser:)"
-echo -e "    ${BF}pct exec $CTID -- qbzd login --callback-host http://${CT_IP}:8182${CL}"
+echo    "  1. Run the configurator. It is an interactive TUI (Qobuz login,"
+echo    "     audio device, Connect device name), so it needs a real terminal:"
+echo -e "       ${BF}pct enter $CTID${CL}"
+echo -e "       ${BF}su - qbzd -c 'qbzd setup'${CL}"
+echo
+echo    "  2. Then enable and start the daemon:"
+echo -e "       ${BF}systemctl enable --now qbzd${CL}"
+echo -e "       ${BF}systemctl status qbzd${CL}"
+echo
+echo    "  The device then appears in the official Qobuz app."
 echo
 echo    "  HTTP API:"
 echo -e "    ${BF}http://${CT_IP}:8182/api/status${CL}"
 echo
-echo    "  To change the DAC later:"
-echo -e "    ${BF}pct exec $CTID -- qbzd-select-audio${CL}"
+echo    "  To change the DAC or any setting later, re-run the configurator:"
+echo -e "    ${BF}pct enter $CTID${CL} then ${BF}su - qbzd -c 'qbzd setup'${CL}"
 echo
 echo    "  To update qbzd:"
-echo -e "    ${BF}pct exec $CTID -- qbzd-update${CL}           # latest"
-echo -e "    ${BF}pct exec $CTID -- qbzd-update v0.1.0${CL}    # specific tag"
+echo -e "    ${BF}pct exec $CTID -- qbzd-update${CL}           # latest upstream release"
+echo -e "    ${BF}pct exec $CTID -- qbzd-update v2.0.2${CL}    # specific tag"
 echo
 echo    "  Auto start/stop with DAC (optional):"
-echo -e "    ${BF}bash <(curl -fsSL https://raw.githubusercontent.com/qbarlas/qbzd/main/install/proxmox-dac-watch.sh)${CL}"
+echo -e "    ${BF}bash <(curl -fsSL https://raw.githubusercontent.com/yet-another-quentin/qbzd/main/install/proxmox-dac-watch.sh)${CL}"
 echo
 if [[ "$AUDIO" == "none" ]]; then
-    echo -e "  ${YW}⚠ No audio backend configured.${CL}"
-    echo    "    Edit /etc/qbz/qbzd.toml, then: pct exec $CTID -- systemctl restart qbzd"
+    echo -e "  ${YW}⚠ No audio backend configured — qbzd will run without real output.${CL}"
     echo
 fi

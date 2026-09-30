@@ -1,79 +1,57 @@
-# Contributing to qbzd
+# Contributing
 
-Contributions are welcome. This project is a headless Rust daemon — no frontend, no build system beyond `cargo`.
+This repository is deployment tooling only: two Bash scripts that install and
+wire up the upstream [qbzd](https://github.com/vicrodh/qbz) daemon inside a
+Proxmox LXC. There is no application code here.
 
-> qbzd is a fork of [vicrodh/qbz](https://github.com/vicrodh/qbz). The core
-> architecture comes from that project. When working on audio backends, the
-> Qobuz API client, or the QConnect protocol, the original codebase is a
-> useful reference.
+## Where a change belongs
+
+- **Playback, audio backends, the HTTP API, Qobuz Connect** — these live
+  upstream in [vicrodh/qbz](https://github.com/vicrodh/qbz). Report and fix
+  them there.
+- **Container creation, ALSA passthrough, the systemd unit, DAC hotplug** —
+  here.
+
+If you are unsure: if the fix would still be needed when running qbzd on bare
+metal, it belongs upstream.
 
 ## Ground rules
 
 - Keep PRs focused. One concern per PR.
-- Write clear commit messages (type: short description).
+- Commit messages: `<type>: <short description>`, type in
+  `feat|fix|chore|docs|refactor`.
 - No emojis in code, comments, or commit messages.
 - Do not modify Qobuz branding or legal disclaimers without discussion.
 
-## Development setup
+## Testing changes
 
-**Prerequisites:** Rust stable, `pkg-config`, `libasound2-dev`, `libdbus-1-dev`
-
-```bash
-git clone https://github.com/qbarlas/qbzd.git
-cd qbzd/crates
-cargo build -p qbzd
-```
-
-Run the daemon:
+These scripts run as root on a Proxmox host and create containers, so they
+cannot be meaningfully unit-tested. Before submitting:
 
 ```bash
-cargo run -p qbzd -- --log-level debug
+bash -n install/proxmox-lxc.sh        # syntax
+shellcheck install/*.sh               # if available
 ```
 
-Then authenticate in another terminal:
+Then run the installer end-to-end on a real Proxmox host, against a throwaway
+CTID, and confirm:
 
-```bash
-cargo run -p qbzd -- login
-```
+1. the container is created and `/dev/snd` is visible inside it;
+2. `qbzd setup` completes and the device shows up in the Qobuz app;
+3. `systemctl enable --now qbzd` survives a `pct restart`;
+4. `qbzd-update` replaces the binary and restarts the service.
 
-## Project structure
+State in the PR which Proxmox version and which DAC you tested against — the
+audio passthrough behaviour varies with both.
 
-```
-crates/
-  qbzd/                   Daemon binary — HTTP API, CLI, auth, QConnect bridge
-  qbz-core/               Orchestrator (player + audio + Qobuz API)
-  qbz-player/             Playback engine, queue, streaming
-  qbz-audio/              Audio backends (PipeWire, ALSA, PulseAudio)
-  qbz-qobuz/              Qobuz API client and OAuth
-  qbz-models/             Shared domain types
-  qbz-cache/              Audio cache (memory + disk)
-  qbz-cmaf/               CMAF/MP4 fragment parser (used by qbz-qobuz)
-  qconnect-protocol/      Qobuz Connect protobuf wire format
-  qconnect-core/          Queue and renderer state machines
-  qconnect-app/           QConnect application logic and orchestration
-  qconnect-transport-ws/  WebSocket transport with qcloud framing
-```
+## Things to be careful about
 
-## Checks before submitting
-
-```bash
-cargo check -p qbzd
-cargo clippy -p qbzd
-cargo test -p qbzd
-```
-
-## Commit message format
-
-```
-<type>: <short description>
-
-<optional body>
-```
-
-Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
-
-## What not to include
-
-- Changes to the Qobuz Connect protocol (reverse-engineered, changes break things).
-- New audio backends without testing on real hardware.
-- Large refactors mixed with feature work.
+- The installer builds a script and pipes it into the container through a
+  heredoc. Variables meant to be resolved **inside** the container must be
+  escaped (`\$FOO`); variables resolved on the host must not. Getting this
+  wrong silently produces empty values.
+- Upstream tarballs embed the version in their filename
+  (`qbzd-2.0.2-linux-amd64.tar.gz`), so `latest` has to be resolved to a
+  concrete tag before the URL can be built.
+- Upstream names architectures `amd64` and `aarch64`; Debian calls the latter
+  `arm64`. The mapping is deliberate, not a typo.
